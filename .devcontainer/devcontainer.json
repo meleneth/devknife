@@ -1,0 +1,35 @@
+{
+  "name": "devknife-bootstrap",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "remoteUser": "vscode",
+  "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
+  "mounts": [
+    "source=devknife-cargo-registry,target=/usr/local/cargo/registry,type=volume",
+    "source=devknife-cargo-git,target=/usr/local/cargo/git,type=volume",
+    "source=devknife-rustup,target=/usr/local/rustup,type=volume",
+    "source=devknife-target,target=/workspace-target,type=volume"
+  ],
+  "containerEnv": {
+    "CARGO_TARGET_DIR": "/workspace-target"
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "rust-lang.rust-analyzer",
+        "tamasfe.even-better-toml",
+        "redhat.vscode-yaml",
+        "yzhang.markdown-all-in-one",
+        "Vue.volar",
+        "ms-azuretools.vscode-docker"
+      ],
+      "settings": {
+        "editor.formatOnSave": true,
+        "rust-analyzer.check.command": "clippy"
+      }
+    }
+  },
+  "postCreateCommand": "rustc --version && cargo --version && rustfmt --version && cargo clippy -V && node --version && pnpm --version",
+  "features": {}
+}

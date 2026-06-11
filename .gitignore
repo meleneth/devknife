@@ -1,0 +1,26 @@
+# OS/editor
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# VS Code local state
+.vscode/*.log
+
+# Rust
+**/target/
+**/*.rs.bk
+Cargo.lock
+
+# Node
+node_modules/
+dist/
+coverage/
+
+# Env and secrets
+.env
+.env.*
+!.env.example
+
+# Devcontainer local overrides
+.devcontainer/devcontainer.local.json
