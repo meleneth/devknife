@@ -1,4 +1,7 @@
 name: local
+services:
+  rest:
+    base_url: http://localhost:18101
 values:
   rest_base_url: http://localhost:18101
   graphql_url: http://localhost:18102/graphql

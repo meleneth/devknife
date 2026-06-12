@@ -1,11 +1,18 @@
 mod effect;
+mod environment;
 mod event;
 mod observation;
 mod trace;
 mod workflow;
 
-pub use effect::{AssertEffect, Effect};
+pub use effect::{
+    AssertEffect, Effect, ResponsePath, RestEffect, RestEventEmission, RestExpectations, RestMethod,
+};
+pub use environment::{RuntimeEnvironment, ServiceBinding};
 pub use event::{Event, EventCause};
-pub use observation::Observation;
+pub use observation::{
+    Observation, RestAssertionObservation, RestBody, RestOperationObservation,
+    RestResponseObservation,
+};
 pub use trace::{RunReport, RunStatus, TraceEntry, TraceEntryKind, TraceFailure};
 pub use workflow::{Handler, Workflow};

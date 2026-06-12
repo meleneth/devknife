@@ -3,8 +3,8 @@ use std::{fs, path::PathBuf};
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use devknife_core::{
-    load_workflow_yaml, validate_workflow, Observation, RunReport, RunStatus, Runner,
-    TraceEntryKind,
+    load_environment_yaml, load_workflow_yaml, validate_workflow, ExecutionLimits, Observation,
+    RestAssertionObservation, RunReport, RunStatus, Runner, TraceEntryKind,
 };
 
 #[derive(Debug, Parser)]
@@ -19,6 +19,8 @@ struct Cli {
 enum Command {
     Run {
         workflow: PathBuf,
+        #[arg(long, value_name = "PATH")]
+        environment: Option<PathBuf>,
         #[arg(long)]
         json: bool,
     },
@@ -31,9 +33,15 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Command::Run { workflow, json } => {
+        Command::Run {
+            workflow,
+            environment,
+            json,
+        } => {
             let workflow = read_workflow(workflow)?;
-            let report = Runner::default().run(workflow);
+            let environment = read_environment(environment)?;
+            let report =
+                Runner::with_environment(ExecutionLimits::default(), environment).run(workflow);
             if json {
                 println!("{}", serde_json::to_string_pretty(&report)?);
             } else {
@@ -48,6 +56,18 @@ fn main() -> Result<()> {
     }
 
     Ok(())
+}
+
+fn read_environment(path: Option<PathBuf>) -> Result<devknife_core::RuntimeEnvironment> {
+    let path = path.unwrap_or_else(|| PathBuf::from("examples/environments/local.yaml"));
+    if !path.exists() {
+        return Ok(devknife_core::RuntimeEnvironment::default());
+    }
+
+    let contents = fs::read_to_string(&path)
+        .with_context(|| format!("failed to read environment file {}", path.display()))?;
+    load_environment_yaml(&contents)
+        .with_context(|| format!("failed to load environment file {}", path.display()))
 }
 
 fn read_workflow(path: PathBuf) -> Result<devknife_core::Workflow> {
@@ -109,6 +129,50 @@ fn trace_line(kind: &TraceEntryKind) -> Option<String> {
             Observation::AssertionFailed { path, .. } => {
                 Some(format!("effect assert {path} failed"))
             }
+            Observation::RestResponse {
+                operation,
+                response,
+                assertions,
+                emitted_events,
+            } => {
+                let status_assertion = assertions.iter().next().map(|assertion| match assertion {
+                    RestAssertionObservation::StatusPassed { expected, .. } => {
+                        format!("status {expected} passed")
+                    }
+                    RestAssertionObservation::StatusFailed { expected, actual } => {
+                        format!("status expected {expected} failed with {actual}")
+                    }
+                });
+                let emitted = emitted_events
+                    .iter()
+                    .map(|event| event.event_type.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                Some(format!(
+                    "effect {} {} {} -> {}{}{}",
+                    effect.name(),
+                    operation.method,
+                    operation.url,
+                    response.status,
+                    status_assertion
+                        .map(|assertion| format!(" ({assertion})"))
+                        .unwrap_or_default(),
+                    if emitted.is_empty() {
+                        String::new()
+                    } else {
+                        format!(" emitted {emitted}")
+                    }
+                ))
+            }
+            Observation::RestFailed {
+                operation, message, ..
+            } => Some(format!(
+                "effect {} {} {} failed: {}",
+                effect.name(),
+                operation.method,
+                operation.url,
+                message
+            )),
         },
         TraceEntryKind::HandlerSkipped { on, .. } => Some(format!("no handler for {on}")),
         TraceEntryKind::RunStarted { .. } | TraceEntryKind::RunEnded { .. } => None,

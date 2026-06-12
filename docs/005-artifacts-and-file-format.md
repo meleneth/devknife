@@ -58,3 +58,34 @@ No Cargo workspace is created in bootstrap because the implementation plan is st
 Phase 1 introduced the Cargo workspace. `crates/devknife-core` owns the initial typed workflow model, in-memory event engine, trace model, and YAML loader. `crates/devknife-cli` owns the `devknife` binary for `run` and `validate`.
 
 YAML is now the initial human-authored workflow format for bootstrap. The format is intentionally small and not yet a stable schema. The pipeline is YAML -> parsed config structs -> validation -> `Workflow` -> engine execution.
+
+Phase 2 adds the first real protocol artifact surface: REST effects in workflow YAML and named service bindings in environment YAML.
+
+Current executable REST effect shape:
+
+```yaml
+- type: rest
+  service: rest
+  operation: get_account
+  method: GET
+  path: /accounts/{{ event.payload.account_id }}
+  headers:
+    x-correlation-id: "{{ event.payload.correlation_id }}"
+  expect:
+    status: 200
+  emits:
+    - event_type: account.loaded
+      payload:
+        account_id: body.id
+```
+
+Current environment binding shape:
+
+```yaml
+name: local
+services:
+  rest:
+    base_url: http://localhost:18101
+```
+
+The interpolation and response path syntax are intentionally minimal. They are not a scripting language.

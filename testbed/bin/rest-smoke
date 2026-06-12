@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+docker compose -f testbed/docker-compose.yml up -d rest-service
+trap 'docker compose -f testbed/docker-compose.yml down' EXIT
+
+curl --fail --silent --show-error http://localhost:18101/health >/dev/null
+cargo run -p devknife-cli -- run examples/workflows/rest-smoke.workflow.yaml

@@ -49,3 +49,17 @@ The trace should support:
 - redaction policy controls
 - trace diff between runs
 - timeline visualization in desktop UI
+
+## Implementation Update
+
+The Rust engine now records each executed effect as one trace entry containing:
+
+- triggering event id
+- handler index
+- effect index
+- typed effect
+- typed observation
+
+For REST effects, the observation includes the resolved method and URL, HTTP status, headers, parsed JSON body when available, assertion results, and any events emitted from response body fields. Emitted events carry `caused_by.event_id` and `caused_by.trace_entry_id`, preserving the path from seed event to REST call to response observation to follow-up event.
+
+Failed REST status assertions fail the run and leave the failed REST observation in the trace.

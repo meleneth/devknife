@@ -3,8 +3,12 @@ pub mod engine;
 pub mod loader;
 
 pub use domain::{
-    Effect, Event, EventCause, Handler, Observation, RunReport, RunStatus, TraceEntry,
-    TraceEntryKind, TraceFailure, Workflow,
+    Effect, Event, EventCause, Handler, Observation, ResponsePath, RestAssertionObservation,
+    RestBody, RestEffect, RestEventEmission, RestExpectations, RestMethod,
+    RestOperationObservation, RestResponseObservation, RunReport, RunStatus, RuntimeEnvironment,
+    ServiceBinding, TraceEntry, TraceEntryKind, TraceFailure, Workflow,
 };
 pub use engine::{EngineError, ExecutionLimits, Runner};
-pub use loader::{load_workflow_yaml, validate_workflow, LoadError};
+pub use loader::{
+    load_environment_yaml, load_workflow_yaml, validate_environment, validate_workflow, LoadError,
+};

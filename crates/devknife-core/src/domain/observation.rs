@@ -1,4 +1,6 @@
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use std::collections::BTreeMap;
 
 use super::Event;
 
@@ -16,7 +18,48 @@ pub enum Observation {
     },
     AssertionFailed {
         path: String,
-        expected: serde_json::Value,
-        actual: Option<serde_json::Value>,
+        expected: Value,
+        actual: Option<Value>,
     },
+    RestResponse {
+        operation: RestOperationObservation,
+        response: RestResponseObservation,
+        assertions: Vec<RestAssertionObservation>,
+        emitted_events: Vec<Event>,
+    },
+    RestFailed {
+        operation: RestOperationObservation,
+        message: String,
+        status: Option<u16>,
+    },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RestOperationObservation {
+    pub service: Option<String>,
+    pub method: String,
+    pub url: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct RestResponseObservation {
+    pub status: u16,
+    #[serde(default)]
+    pub headers: BTreeMap<String, String>,
+    pub body: RestBody,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum RestBody {
+    Json { value: Value },
+    Text { value: String },
+    Empty,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum RestAssertionObservation {
+    StatusPassed { expected: u16, actual: u16 },
+    StatusFailed { expected: u16, actual: u16 },
 }

@@ -1,11 +1,17 @@
-use std::collections::VecDeque;
+use std::{
+    collections::{BTreeMap, VecDeque},
+    io::{Read, Write},
+    net::TcpStream,
+    time::Duration,
+};
 
 use serde_json::Value;
 use uuid::Uuid;
 
 use crate::domain::{
-    AssertEffect, Effect, Event, EventCause, Observation, RunReport, RunStatus, TraceEntry,
-    TraceEntryKind, TraceFailure, Workflow,
+    AssertEffect, Effect, Event, EventCause, Observation, ResponsePath, RestAssertionObservation,
+    RestBody, RestEffect, RestMethod, RestOperationObservation, RestResponseObservation, RunReport,
+    RunStatus, RuntimeEnvironment, TraceEntry, TraceEntryKind, TraceFailure, Workflow,
 };
 
 use super::EngineError;
@@ -30,11 +36,22 @@ impl Default for ExecutionLimits {
 #[derive(Clone, Debug)]
 pub struct Runner {
     limits: ExecutionLimits,
+    environment: RuntimeEnvironment,
 }
 
 impl Runner {
     pub fn new(limits: ExecutionLimits) -> Self {
-        Self { limits }
+        Self {
+            limits,
+            environment: RuntimeEnvironment::default(),
+        }
+    }
+
+    pub fn with_environment(limits: ExecutionLimits, environment: RuntimeEnvironment) -> Self {
+        Self {
+            limits,
+            environment,
+        }
     }
 
     pub fn run(&self, workflow: Workflow) -> RunReport {
@@ -100,7 +117,14 @@ impl Runner {
                         Err(error) => return state.fail(Some(trace_entry_id), error.to_string()),
                     };
 
-                    if let Observation::AssertionFailed { .. } = observation {
+                    if observation_failed(&observation) {
+                        let failure_message = format!(
+                            "event {} triggered handler {} effect {}: {}",
+                            event.id,
+                            handler_index,
+                            effect_index,
+                            observation_failure_message(&observation)
+                        );
                         state.push_trace_with_id(
                             trace_entry_id.clone(),
                             TraceEntryKind::EffectExecuted {
@@ -111,14 +135,12 @@ impl Runner {
                                 observation,
                             },
                         );
-                        return state.fail(
-                            Some(trace_entry_id),
-                            "assertion failed during workflow run".to_string(),
-                        );
+                        return state.fail(Some(trace_entry_id), failure_message);
                     }
 
                     let emitted = match &observation {
                         Observation::EmittedEvents { events } => events.clone(),
+                        Observation::RestResponse { emitted_events, .. } => emitted_events.clone(),
                         _ => Vec::new(),
                     };
 
@@ -196,7 +218,109 @@ impl Runner {
                 message: message.clone(),
             }),
             Effect::Assert(assertion) => Ok(evaluate_assertion(assertion, &event.payload)),
+            Effect::Rest(rest) => {
+                self.execute_rest_effect(rest, event, trace_entry_id, created_events)
+            }
         }
+    }
+
+    fn execute_rest_effect(
+        &self,
+        rest: &RestEffect,
+        event: &Event,
+        trace_entry_id: &str,
+        created_events: &mut usize,
+    ) -> Result<Observation, EngineError> {
+        let request = match build_rest_request(rest, event, &self.environment) {
+            Ok(request) => request,
+            Err(error) => {
+                return Ok(Observation::RestFailed {
+                    operation: fallback_rest_operation(rest, event, &self.environment),
+                    message: error.to_string(),
+                    status: None,
+                });
+            }
+        };
+        let response = match execute_http_request(&request) {
+            Ok(response) => response,
+            Err(error) => {
+                return Ok(Observation::RestFailed {
+                    operation: RestOperationObservation {
+                        service: rest.service.clone(),
+                        method: rest.method.as_str().to_string(),
+                        url: request.url,
+                    },
+                    message: error.to_string(),
+                    status: None,
+                });
+            }
+        };
+        let assertions = evaluate_rest_assertions(rest, response.status);
+        let emitted_events =
+            self.build_rest_emitted_events(rest, event, trace_entry_id, created_events, &response)?;
+
+        Ok(Observation::RestResponse {
+            operation: RestOperationObservation {
+                service: rest.service.clone(),
+                method: rest.method.as_str().to_string(),
+                url: request.url,
+            },
+            response,
+            assertions,
+            emitted_events,
+        })
+    }
+
+    fn build_rest_emitted_events(
+        &self,
+        rest: &RestEffect,
+        event: &Event,
+        trace_entry_id: &str,
+        created_events: &mut usize,
+        response: &RestResponseObservation,
+    ) -> Result<Vec<Event>, EngineError> {
+        let mut emitted_events = Vec::new();
+
+        for emission in &rest.emits {
+            if *created_events >= self.limits.max_events {
+                return Err(EngineError::MaxEventCountExceeded {
+                    limit: self.limits.max_events,
+                });
+            }
+
+            let next_depth = event.depth + 1;
+            if next_depth > self.limits.max_depth {
+                return Err(EngineError::MaxDepthExceeded {
+                    limit: self.limits.max_depth,
+                });
+            }
+
+            let mut payload = serde_json::Map::new();
+            for (field, path) in &emission.payload {
+                let value = lookup_response_path(response, path)
+                    .cloned()
+                    .ok_or_else(|| EngineError::RestEmissionPathMissing {
+                        event_type: emission.event_type.clone(),
+                        path: path.as_path().to_string(),
+                    })?;
+                payload.insert(field.clone(), value);
+            }
+
+            *created_events += 1;
+            emitted_events.push(Event {
+                id: format!("event-{}", created_events),
+                event_type: emission.event_type.clone(),
+                payload: Value::Object(payload),
+                caused_by: Some(EventCause {
+                    event_id: event.id.clone(),
+                    trace_entry_id: trace_entry_id.to_string(),
+                }),
+                sequence: *created_events as u64,
+                depth: next_depth,
+            });
+        }
+
+        Ok(emitted_events)
     }
 
     fn check_step_limit(&self, processed_steps: usize) -> Result<(), EngineError> {
@@ -231,6 +355,90 @@ fn evaluate_assertion(assertion: &AssertEffect, payload: &Value) -> Observation 
     }
 }
 
+fn observation_failed(observation: &Observation) -> bool {
+    match observation {
+        Observation::AssertionFailed { .. } => true,
+        Observation::RestResponse { assertions, .. } => assertions
+            .iter()
+            .any(|assertion| matches!(assertion, RestAssertionObservation::StatusFailed { .. })),
+        Observation::RestFailed { .. } => true,
+        _ => false,
+    }
+}
+
+fn observation_failure_message(observation: &Observation) -> String {
+    match observation {
+        Observation::AssertionFailed {
+            path,
+            expected,
+            actual,
+        } => format!(
+            "assertion failed during workflow run: path {path} expected {expected}, actual {}",
+            actual
+                .as_ref()
+                .map(Value::to_string)
+                .unwrap_or_else(|| "<missing>".to_string())
+        ),
+        Observation::RestResponse {
+            operation,
+            response,
+            assertions,
+            ..
+        } => assertions
+            .iter()
+            .find_map(|assertion| match assertion {
+                RestAssertionObservation::StatusFailed { expected, actual } => Some(format!(
+                    "REST assertion failed during workflow run: event-triggered handler executed {} {}; status expected {}, actual {}",
+                    operation.method, operation.url, expected, actual
+                )),
+                RestAssertionObservation::StatusPassed { .. } => None,
+            })
+            .unwrap_or_else(|| {
+                format!(
+                    "REST effect failed during workflow run: {} {} returned status {}",
+                    operation.method, operation.url, response.status
+                )
+            }),
+        Observation::RestFailed {
+            operation,
+            message,
+            status,
+        } => format!(
+            "REST effect failed during workflow run: {} {}{}: {}",
+            operation.method,
+            operation.url,
+            status
+                .map(|status| format!(" returned status {status}"))
+                .unwrap_or_default(),
+            message
+        ),
+        _ => "workflow run failed".to_string(),
+    }
+}
+
+fn evaluate_rest_assertions(
+    rest: &RestEffect,
+    actual_status: u16,
+) -> Vec<RestAssertionObservation> {
+    rest.expect
+        .status
+        .map(|expected| {
+            if expected == actual_status {
+                RestAssertionObservation::StatusPassed {
+                    expected,
+                    actual: actual_status,
+                }
+            } else {
+                RestAssertionObservation::StatusFailed {
+                    expected,
+                    actual: actual_status,
+                }
+            }
+        })
+        .into_iter()
+        .collect()
+}
+
 fn lookup_payload_path<'a>(payload: &'a Value, path: &str) -> Option<&'a Value> {
     let trimmed = path
         .strip_prefix("$.")
@@ -246,6 +454,417 @@ fn lookup_payload_path<'a>(payload: &'a Value, path: &str) -> Option<&'a Value> 
         current = current.get(segment)?;
     }
     Some(current)
+}
+
+fn lookup_response_path<'a>(
+    response: &'a RestResponseObservation,
+    response_path: &ResponsePath,
+) -> Option<&'a Value> {
+    let path = response_path.as_path();
+    let trimmed = path.strip_prefix("$.").unwrap_or(path);
+    let body_path = trimmed.strip_prefix("body.")?;
+    let RestBody::Json { value } = &response.body else {
+        return None;
+    };
+
+    if body_path.is_empty() {
+        return Some(value);
+    }
+
+    let mut current = value;
+    for segment in body_path.split('.') {
+        current = current.get(segment)?;
+    }
+    Some(current)
+}
+
+#[derive(Debug)]
+struct BuiltRestRequest {
+    operation: String,
+    method: RestMethod,
+    host: String,
+    port: u16,
+    path_and_query: String,
+    headers: BTreeMap<String, String>,
+    body: Option<String>,
+    url: String,
+}
+
+fn build_rest_request(
+    rest: &RestEffect,
+    event: &Event,
+    environment: &RuntimeEnvironment,
+) -> Result<BuiltRestRequest, EngineError> {
+    let operation = rest
+        .operation
+        .clone()
+        .unwrap_or_else(|| format!("{} {}", rest.method.as_str(), rest.path));
+    let base_url_template = rest
+        .base_url
+        .clone()
+        .or_else(|| {
+            rest.service
+                .as_ref()
+                .and_then(|service| environment.services.get(service))
+                .map(|binding| binding.base_url.clone())
+        })
+        .ok_or_else(|| {
+            rest.service
+                .as_ref()
+                .map(|service| EngineError::MissingRestServiceBinding {
+                    service: service.clone(),
+                })
+                .unwrap_or(EngineError::MissingRestBaseUrl)
+        })?;
+
+    let base_url = interpolate_string(&base_url_template, event, environment, &operation)?;
+    let base = parse_http_base_url(&base_url)?;
+    let path = interpolate_string(&rest.path, event, environment, &operation)?;
+    let mut query_pairs = Vec::new();
+    for (key, value) in &rest.query {
+        query_pairs.push(format!(
+            "{}={}",
+            percent_encode(key),
+            percent_encode(&interpolate_string(value, event, environment, &operation)?)
+        ));
+    }
+
+    let path_and_query = if query_pairs.is_empty() {
+        path.clone()
+    } else {
+        format!("{path}?{}", query_pairs.join("&"))
+    };
+    let url = format!("{}{}", base.origin, path_and_query);
+
+    let mut headers = BTreeMap::new();
+    for (key, value) in &rest.headers {
+        headers.insert(
+            key.clone(),
+            interpolate_string(value, event, environment, &operation)?,
+        );
+    }
+
+    let body = rest
+        .json_body
+        .as_ref()
+        .map(|body| interpolate_json(body, event, environment, &operation))
+        .transpose()?
+        .map(|body| serde_json::to_string(&body).expect("JSON values serialize"));
+
+    Ok(BuiltRestRequest {
+        operation,
+        method: rest.method.clone(),
+        host: base.host,
+        port: base.port,
+        path_and_query,
+        headers,
+        body,
+        url,
+    })
+}
+
+fn fallback_rest_operation(
+    rest: &RestEffect,
+    event: &Event,
+    environment: &RuntimeEnvironment,
+) -> RestOperationObservation {
+    let method = rest.method.as_str().to_string();
+    let base_url = rest
+        .base_url
+        .clone()
+        .or_else(|| {
+            rest.service
+                .as_ref()
+                .and_then(|service| environment.services.get(service))
+                .map(|binding| binding.base_url.clone())
+        })
+        .unwrap_or_else(|| "<unbound>".to_string());
+    let path = interpolate_string(
+        &rest.path,
+        event,
+        environment,
+        rest.operation.as_deref().unwrap_or("rest"),
+    )
+    .unwrap_or_else(|_| rest.path.clone());
+
+    RestOperationObservation {
+        service: rest.service.clone(),
+        method,
+        url: format!("{}{}", base_url.trim_end_matches('/'), path),
+    }
+}
+
+#[derive(Debug)]
+struct HttpBaseUrl {
+    origin: String,
+    host: String,
+    port: u16,
+}
+
+fn parse_http_base_url(base_url: &str) -> Result<HttpBaseUrl, EngineError> {
+    let without_scheme =
+        base_url
+            .strip_prefix("http://")
+            .ok_or_else(|| EngineError::UnsupportedRestBaseUrl {
+                base_url: base_url.to_string(),
+            })?;
+    let authority = without_scheme.trim_end_matches('/');
+    if authority.contains('/') {
+        return Err(EngineError::UnsupportedRestBaseUrl {
+            base_url: base_url.to_string(),
+        });
+    }
+
+    let (host, port) = match authority.rsplit_once(':') {
+        Some((host, port)) => (
+            host.to_string(),
+            port.parse::<u16>()
+                .map_err(|error| EngineError::UnsupportedRestBaseUrl {
+                    base_url: format!("{base_url} ({error})"),
+                })?,
+        ),
+        None => (authority.to_string(), 80),
+    };
+
+    Ok(HttpBaseUrl {
+        origin: format!("http://{}:{}", host, port),
+        host,
+        port,
+    })
+}
+
+fn execute_http_request(
+    request: &BuiltRestRequest,
+) -> Result<RestResponseObservation, EngineError> {
+    let mut stream =
+        TcpStream::connect((request.host.as_str(), request.port)).map_err(|error| {
+            EngineError::RestRequestFailed {
+                operation: request.operation.clone(),
+                message: error.to_string(),
+            }
+        })?;
+    stream
+        .set_read_timeout(Some(Duration::from_secs(10)))
+        .map_err(|error| EngineError::RestRequestFailed {
+            operation: request.operation.clone(),
+            message: error.to_string(),
+        })?;
+    stream
+        .set_write_timeout(Some(Duration::from_secs(10)))
+        .map_err(|error| EngineError::RestRequestFailed {
+            operation: request.operation.clone(),
+            message: error.to_string(),
+        })?;
+
+    let body = request.body.as_deref().unwrap_or("");
+    let mut http_request = format!(
+        "{} {} HTTP/1.1\r\nHost: {}\r\nConnection: close\r\nAccept: application/json\r\n",
+        request.method.as_str(),
+        request.path_and_query,
+        request.host
+    );
+    for (key, value) in &request.headers {
+        http_request.push_str(&format!("{key}: {value}\r\n"));
+    }
+    if request.body.is_some() {
+        http_request.push_str("Content-Type: application/json\r\n");
+    }
+    http_request.push_str(&format!("Content-Length: {}\r\n\r\n{body}", body.len()));
+
+    stream
+        .write_all(http_request.as_bytes())
+        .map_err(|error| EngineError::RestRequestFailed {
+            operation: request.operation.clone(),
+            message: error.to_string(),
+        })?;
+
+    let mut raw_response = Vec::new();
+    stream
+        .read_to_end(&mut raw_response)
+        .map_err(|error| EngineError::RestRequestFailed {
+            operation: request.operation.clone(),
+            message: error.to_string(),
+        })?;
+
+    parse_http_response(&request.operation, &raw_response)
+}
+
+fn parse_http_response(
+    operation: &str,
+    raw_response: &[u8],
+) -> Result<RestResponseObservation, EngineError> {
+    let response = String::from_utf8_lossy(raw_response);
+    let (head, body) =
+        response
+            .split_once("\r\n\r\n")
+            .ok_or_else(|| EngineError::RestRequestFailed {
+                operation: operation.to_string(),
+                message: "malformed HTTP response".to_string(),
+            })?;
+    let mut lines = head.lines();
+    let status_line = lines.next().ok_or_else(|| EngineError::RestRequestFailed {
+        operation: operation.to_string(),
+        message: "missing HTTP status line".to_string(),
+    })?;
+    let status = status_line
+        .split_whitespace()
+        .nth(1)
+        .ok_or_else(|| EngineError::RestRequestFailed {
+            operation: operation.to_string(),
+            message: "missing HTTP status code".to_string(),
+        })?
+        .parse::<u16>()
+        .map_err(|error| EngineError::RestRequestFailed {
+            operation: operation.to_string(),
+            message: error.to_string(),
+        })?;
+
+    let mut headers = BTreeMap::new();
+    for line in lines {
+        if let Some((key, value)) = line.split_once(':') {
+            headers.insert(key.trim().to_ascii_lowercase(), value.trim().to_string());
+        }
+    }
+
+    let body = if body.is_empty() {
+        RestBody::Empty
+    } else if headers
+        .get("content-type")
+        .is_some_and(|content_type| content_type.contains("application/json"))
+    {
+        match serde_json::from_str::<Value>(body) {
+            Ok(value) => RestBody::Json { value },
+            Err(_) => RestBody::Text {
+                value: body.to_string(),
+            },
+        }
+    } else {
+        RestBody::Text {
+            value: body.to_string(),
+        }
+    };
+
+    Ok(RestResponseObservation {
+        status,
+        headers,
+        body,
+    })
+}
+
+fn interpolate_json(
+    value: &Value,
+    event: &Event,
+    environment: &RuntimeEnvironment,
+    operation: &str,
+) -> Result<Value, EngineError> {
+    match value {
+        Value::String(value) => Ok(Value::String(interpolate_string(
+            value,
+            event,
+            environment,
+            operation,
+        )?)),
+        Value::Array(values) => values
+            .iter()
+            .map(|value| interpolate_json(value, event, environment, operation))
+            .collect(),
+        Value::Object(object) => object
+            .iter()
+            .map(|(key, value)| {
+                Ok((
+                    key.clone(),
+                    interpolate_json(value, event, environment, operation)?,
+                ))
+            })
+            .collect::<Result<serde_json::Map<String, Value>, EngineError>>()
+            .map(Value::Object),
+        _ => Ok(value.clone()),
+    }
+}
+
+fn interpolate_string(
+    template: &str,
+    event: &Event,
+    environment: &RuntimeEnvironment,
+    operation: &str,
+) -> Result<String, EngineError> {
+    let mut output = String::new();
+    let mut remaining = template;
+
+    while let Some(start) = remaining.find("{{") {
+        let before = &remaining[..start];
+        output.push_str(before);
+        let after_start = &remaining[start + 2..];
+        let Some(end) = after_start.find("}}") else {
+            return Err(EngineError::RestRequestBuild {
+                operation: operation.to_string(),
+                message: format!("unclosed template in '{template}'"),
+            });
+        };
+        let expression = after_start[..end].trim();
+        output.push_str(&resolve_template_expression(
+            expression,
+            event,
+            environment,
+            operation,
+        )?);
+        remaining = &after_start[end + 2..];
+    }
+
+    output.push_str(remaining);
+    Ok(output)
+}
+
+fn resolve_template_expression(
+    expression: &str,
+    event: &Event,
+    environment: &RuntimeEnvironment,
+    operation: &str,
+) -> Result<String, EngineError> {
+    if let Some(path) = expression.strip_prefix("event.payload.") {
+        return lookup_payload_path(&event.payload, path)
+            .map(template_value_to_string)
+            .ok_or_else(|| EngineError::RestRequestBuild {
+                operation: operation.to_string(),
+                message: format!("event payload path '{path}' was not found"),
+            });
+    }
+
+    if let Some(name) = expression.strip_prefix("env.") {
+        return environment.values.get(name).cloned().ok_or_else(|| {
+            EngineError::RestRequestBuild {
+                operation: operation.to_string(),
+                message: format!("environment value '{name}' was not found"),
+            }
+        });
+    }
+
+    Err(EngineError::RestRequestBuild {
+        operation: operation.to_string(),
+        message: format!("unsupported template expression '{expression}'"),
+    })
+}
+
+fn template_value_to_string(value: &Value) -> String {
+    match value {
+        Value::String(value) => value.clone(),
+        Value::Number(value) => value.to_string(),
+        Value::Bool(value) => value.to_string(),
+        Value::Null => "null".to_string(),
+        Value::Array(_) | Value::Object(_) => value.to_string(),
+    }
+}
+
+fn percent_encode(value: &str) -> String {
+    value
+        .bytes()
+        .flat_map(|byte| match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                vec![byte as char]
+            }
+            _ => format!("%{byte:02X}").chars().collect(),
+        })
+        .collect()
 }
 
 struct RunState {

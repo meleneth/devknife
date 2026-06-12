@@ -2,7 +2,7 @@
 
 This repository defines a file-backed, cross-platform service workflow runner for developers. The core model is event-native execution: workflows start from seed events, handlers produce effects, effects produce observations, observations may emit more typed events, and every run yields a causal trace explaining what happened and why.
 
-Status: Bootstrap and planning only.
+Status: Bootstrap implementation with the first narrow REST adapter.
 
 ## What Exists In This Repository
 
@@ -11,15 +11,15 @@ Status: Bootstrap and planning only.
 - Architecture decision records (ADRs).
 - Draft roadmap from bootstrap to v1.
 - Devcontainer setup for Rust + Node toolchains.
+- Rust workspace with a small event-native engine, CLI, YAML loader, typed trace, and a narrow REST effect.
 
 ## What Does Not Exist Yet
 
-- No workflow engine implementation.
-- No CLI implementation.
 - No desktop UI.
 - No Tauri application.
 - No plugin system.
 - No hosted service.
+- No GraphQL, SQS, or WebSocket adapters yet.
 
 ## Open In Devcontainer
 
@@ -51,7 +51,7 @@ Any syntax examples in this repository are illustrative draft shapes, not final 
 
 ## Initial Implementation
 
-The repository now contains a first Rust workspace with `devknife-core` and `devknife-cli`. The implemented engine is intentionally small: it runs in-memory `emit`, `record`, and `assert` effects, produces a typed causal trace, and avoids real REST, GraphQL, SQS, or WebSocket execution.
+The repository now contains a first Rust workspace with `devknife-core` and `devknife-cli`. The implemented engine is intentionally small: it runs in-memory `emit`, `record`, and event-payload `assert` effects, plus a narrow real REST effect that can call an HTTP JSON service, assert status, emit events from response body paths such as `body.id`, and record the causal chain in the run trace.
 
 Useful commands:
 
@@ -61,4 +61,12 @@ Useful commands:
 - `cargo run -p devknife-cli -- validate examples/workflows/bootstrap.workflow.yaml`
 - `docker compose -f testbed/docker-compose.yml config`
 
-The local testbed under `testbed/` is for future protocol adapter work and is not used by the current Rust engine.
+REST smoke test:
+
+- `docker compose -f testbed/docker-compose.yml up -d rest-service`
+- `curl http://localhost:18101/health`
+- `cargo run -p devknife-cli -- run examples/workflows/rest-smoke.workflow.yaml`
+- `docker compose -f testbed/docker-compose.yml down`
+- or `testbed/bin/rest-smoke`
+
+The local REST fixture is now used by the Rust engine. GraphQL, SQS, and WebSocket fixtures remain future adapter targets.

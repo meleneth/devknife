@@ -6,6 +6,8 @@ This project treats protocol families as first-class domain concepts, not generi
 
 ## REST
 
+Implementation status: narrow real adapter.
+
 Modeled with REST-native concepts:
 
 - method
@@ -16,9 +18,27 @@ Modeled with REST-native concepts:
 - status
 - response headers/body
 
+Current implementation supports:
+
+- named service binding to an HTTP base URL through environment YAML
+- `GET`, `POST`, `PUT`, `PATCH`, and `DELETE`
+- path, query params, headers, and optional JSON request body
+- minimal string interpolation from `event.payload.*` and `env.*`
+- typed response observation with status, headers, JSON body when possible, and text/empty fallback
+- status equality assertion
+- event emission from JSON response paths such as `body.id`
+
+Current limits:
+
+- `http://` only; TLS support is future work
+- no retries, timeout policies, auth helpers, cookies, multipart, or OpenAPI import
+- no full expression language
+
 OpenAPI import is a future capability.
 
 ## GraphQL
+
+Implementation status: future adapter, not executable yet.
 
 Modeled with GraphQL-native concepts:
 
@@ -35,6 +55,8 @@ GraphQL over HTTP 200 with `errors` must not be treated as generic success.
 
 ## SQS
 
+Implementation status: future adapter, not executable yet.
+
 Modeled as asynchronous queue semantics:
 
 - send
@@ -47,6 +69,8 @@ Modeled as asynchronous queue semantics:
 V1 scope is intentionally narrower than full SQS semantics.
 
 ## WebSockets
+
+Implementation status: future adapter, not executable yet.
 
 Modeled as live session semantics:
 

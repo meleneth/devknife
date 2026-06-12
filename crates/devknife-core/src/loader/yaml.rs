@@ -2,7 +2,7 @@ use serde::Deserialize;
 use serde_json::Value;
 use thiserror::Error;
 
-use crate::domain::{Effect, Event, Handler, Workflow};
+use crate::domain::{Effect, Event, Handler, RuntimeEnvironment, Workflow};
 
 #[derive(Debug, Error)]
 pub enum LoadError {
@@ -17,6 +17,29 @@ pub fn load_workflow_yaml(input: &str) -> Result<Workflow, LoadError> {
     let workflow = document.into_workflow();
     validate_workflow(&workflow)?;
     Ok(workflow)
+}
+
+pub fn load_environment_yaml(input: &str) -> Result<RuntimeEnvironment, LoadError> {
+    let environment: RuntimeEnvironment = serde_yml::from_str(input)?;
+    validate_environment(&environment)?;
+    Ok(environment)
+}
+
+pub fn validate_environment(environment: &RuntimeEnvironment) -> Result<(), LoadError> {
+    for (service, binding) in &environment.services {
+        if service.trim().is_empty() {
+            return Err(LoadError::Validation(
+                "environment service name is required".to_string(),
+            ));
+        }
+        if binding.base_url.trim().is_empty() {
+            return Err(LoadError::Validation(format!(
+                "environment service {service}.base_url is required"
+            )));
+        }
+    }
+
+    Ok(())
 }
 
 pub fn validate_workflow(workflow: &Workflow) -> Result<(), LoadError> {
@@ -64,6 +87,38 @@ fn validate_effect(
             Err(LoadError::Validation(format!(
                 "handlers[{handler_index}].effects[{effect_index}].path is required"
             )))
+        }
+        Effect::Rest(rest) => {
+            if rest
+                .service
+                .as_deref()
+                .unwrap_or_default()
+                .trim()
+                .is_empty()
+                && rest
+                    .base_url
+                    .as_deref()
+                    .unwrap_or_default()
+                    .trim()
+                    .is_empty()
+            {
+                return Err(LoadError::Validation(format!(
+                    "handlers[{handler_index}].effects[{effect_index}] requires service or base_url"
+                )));
+            }
+            if rest.path.trim().is_empty() {
+                return Err(LoadError::Validation(format!(
+                    "handlers[{handler_index}].effects[{effect_index}].path is required"
+                )));
+            }
+            for (emit_index, emit) in rest.emits.iter().enumerate() {
+                if emit.event_type.trim().is_empty() {
+                    return Err(LoadError::Validation(format!(
+                        "handlers[{handler_index}].effects[{effect_index}].emits[{emit_index}].event_type is required"
+                    )));
+                }
+            }
+            Ok(())
         }
         Effect::Emit { .. } | Effect::Record { .. } | Effect::Assert(_) => Ok(()),
     }

@@ -1,8 +1,14 @@
 use devknife_core::{
-    Effect, Event, ExecutionLimits, Handler, Observation, RunStatus, Runner, TraceEntryKind,
-    Workflow,
+    Effect, Event, ExecutionLimits, Handler, Observation, RestAssertionObservation, RunStatus,
+    Runner, RuntimeEnvironment, ServiceBinding, TraceEntryKind, Workflow,
 };
 use serde_json::json;
+use std::{
+    collections::BTreeMap,
+    io::{Read, Write},
+    net::TcpListener,
+    thread,
+};
 
 #[test]
 fn seed_event_with_no_handlers_traces_and_succeeds() {
@@ -208,4 +214,334 @@ handlers:
     assert_eq!(workflow.seed_events[0].event_type, "payload.seen");
     assert_eq!(workflow.seed_events[0].payload["nested"]["count"], json!(2));
     assert_eq!(Runner::default().run(workflow).status, RunStatus::Succeeded);
+}
+
+#[test]
+fn rest_effect_builds_request_from_event_and_environment() {
+    let server = RestTestServer::start(|request| {
+        assert!(request.starts_with("POST /accounts?source=test HTTP/1.1"));
+        assert!(request.contains("x-correlation-id: corr-001"));
+        assert!(request.contains(r#"{"name":"Acme"}"#));
+        http_response(201, r#"{"id":"acct_created_001"}"#)
+    });
+    let workflow = devknife_core::load_workflow_yaml(
+        r#"
+name: rest-builds-request
+seed_events:
+  - id: seed-create
+    type: account.create.requested
+    payload:
+      name: Acme
+      correlation_id: corr-001
+handlers:
+  - on: account.create.requested
+    effects:
+      - type: rest
+        service: rest
+        operation: create_account
+        method: POST
+        path: /accounts
+        query:
+          source: test
+        headers:
+          x-correlation-id: "{{ event.payload.correlation_id }}"
+        json_body:
+          name: "{{ event.payload.name }}"
+        expect:
+          status: 201
+"#,
+    )
+    .expect("workflow parses");
+
+    let report = runner_with_rest(server.base_url()).run(workflow);
+
+    assert_eq!(report.status, RunStatus::Succeeded);
+    assert!(report.trace.iter().any(|entry| {
+        matches!(
+            &entry.kind,
+            TraceEntryKind::EffectExecuted {
+                observation:
+                    Observation::RestResponse {
+                        response,
+                        assertions,
+                        ..
+                    },
+                ..
+            } if response.status == 201
+                && matches!(
+                    assertions.as_slice(),
+                    [RestAssertionObservation::StatusPassed { expected: 201, actual: 201 }]
+                )
+        )
+    }));
+}
+
+#[test]
+fn successful_rest_response_emits_event_from_json_body() {
+    let server =
+        RestTestServer::start(|_| http_response(200, r#"{"id":"acct_001","name":"Demo"}"#));
+    let workflow = devknife_core::load_workflow_yaml(
+        r#"
+name: rest-emits
+seed_events:
+  - id: seed-load
+    type: account.load.requested
+    payload:
+      account_id: acct_001
+handlers:
+  - on: account.load.requested
+    effects:
+      - type: rest
+        service: rest
+        operation: get_account
+        method: GET
+        path: /accounts/{{ event.payload.account_id }}
+        expect:
+          status: 200
+        emits:
+          - event_type: account.loaded
+            payload:
+              account_id: body.id
+              name:
+                from: body.name
+"#,
+    )
+    .expect("workflow parses");
+
+    let report = runner_with_rest(server.base_url()).run(workflow);
+
+    assert_eq!(report.status, RunStatus::Succeeded);
+    let emitted = report
+        .trace
+        .iter()
+        .find_map(|entry| match &entry.kind {
+            TraceEntryKind::EffectExecuted {
+                observation: Observation::RestResponse { emitted_events, .. },
+                ..
+            } => emitted_events.first(),
+            _ => None,
+        })
+        .expect("REST emitted event");
+    assert_eq!(emitted.event_type, "account.loaded");
+    assert_eq!(
+        emitted.payload,
+        json!({"account_id": "acct_001", "name": "Demo"})
+    );
+}
+
+#[test]
+fn failed_rest_status_assertion_fails_run() {
+    let server = RestTestServer::start(|_| http_response(404, r#"{"error":"missing"}"#));
+    let workflow = devknife_core::load_workflow_yaml(
+        r#"
+name: rest-fails-status
+seed_events:
+  - id: seed-load
+    type: account.load.requested
+handlers:
+  - on: account.load.requested
+    effects:
+      - type: rest
+        service: rest
+        operation: get_account
+        method: GET
+        path: /accounts/missing
+        expect:
+          status: 200
+"#,
+    )
+    .expect("workflow parses");
+
+    let report = runner_with_rest(server.base_url()).run(workflow);
+
+    assert_eq!(report.status, RunStatus::Failed);
+    let failure = report.failure.expect("failure");
+    assert!(failure
+        .message
+        .contains("event seed-load triggered handler 0 effect 0"));
+    assert!(failure.message.contains("status expected 200, actual 404"));
+    assert!(report.trace.iter().any(|entry| {
+        matches!(
+            &entry.kind,
+            TraceEntryKind::EffectExecuted {
+                observation:
+                    Observation::RestResponse {
+                        response,
+                        assertions,
+                        ..
+                    },
+                ..
+            } if response.status == 404
+                && assertions.iter().any(|assertion| matches!(
+                    assertion,
+                    RestAssertionObservation::StatusFailed {
+                        expected: 200,
+                        actual: 404
+                    }
+                ))
+        )
+    }));
+}
+
+#[test]
+fn missing_rest_service_binding_fails_run_clearly() {
+    let workflow = devknife_core::load_workflow_yaml(
+        r#"
+name: missing-rest-binding
+seed_events:
+  - id: seed-load
+    type: account.load.requested
+handlers:
+  - on: account.load.requested
+    effects:
+      - type: rest
+        service: rest
+        method: GET
+        path: /accounts/acct_001
+"#,
+    )
+    .expect("workflow parses");
+
+    let report = Runner::default().run(workflow);
+
+    assert_eq!(report.status, RunStatus::Failed);
+    assert!(report
+        .failure
+        .expect("failure")
+        .message
+        .contains("missing REST service binding for 'rest'"));
+    assert!(report.trace.iter().any(|entry| {
+        matches!(
+            &entry.kind,
+            TraceEntryKind::EffectExecuted {
+                event_id,
+                handler_index: 0,
+                effect_index: 0,
+                observation: Observation::RestFailed { message, .. },
+                ..
+            } if event_id == "seed-load" && message.contains("missing REST service binding")
+        )
+    }));
+}
+
+#[test]
+fn trace_preserves_causality_through_rest_effect() {
+    let server = RestTestServer::start(|_| http_response(200, r#"{"id":"acct_001"}"#));
+    let workflow = devknife_core::load_workflow_yaml(
+        r#"
+name: rest-causality
+seed_events:
+  - id: seed-load
+    type: account.load.requested
+handlers:
+  - on: account.load.requested
+    effects:
+      - type: rest
+        service: rest
+        operation: get_account
+        method: GET
+        path: /accounts/acct_001
+        expect:
+          status: 200
+        emits:
+          - event_type: account.loaded
+            payload:
+              account_id: body.id
+"#,
+    )
+    .expect("workflow parses");
+
+    let report = runner_with_rest(server.base_url()).run(workflow);
+    let (effect_trace_id, emitted) = report
+        .trace
+        .iter()
+        .find_map(|entry| match &entry.kind {
+            TraceEntryKind::EffectExecuted {
+                event_id,
+                handler_index,
+                effect_index,
+                observation:
+                    Observation::RestResponse {
+                        operation,
+                        response,
+                        emitted_events,
+                        ..
+                    },
+                ..
+            } => {
+                assert_eq!(event_id, "seed-load");
+                assert_eq!(*handler_index, 0);
+                assert_eq!(*effect_index, 0);
+                assert_eq!(operation.method, "GET");
+                assert_eq!(response.status, 200);
+                Some((entry.id.clone(), emitted_events[0].clone()))
+            }
+            _ => None,
+        })
+        .expect("REST trace entry");
+
+    let cause = emitted.caused_by.expect("cause");
+    assert_eq!(cause.event_id, "seed-load");
+    assert_eq!(cause.trace_entry_id, effect_trace_id);
+    assert!(report.trace.iter().any(|entry| {
+        matches!(
+            &entry.kind,
+            TraceEntryKind::EventDequeued { event }
+                if event.event_type == "account.loaded"
+        )
+    }));
+}
+
+fn runner_with_rest(base_url: String) -> Runner {
+    let mut services = BTreeMap::new();
+    services.insert("rest".to_string(), ServiceBinding { base_url });
+    Runner::with_environment(
+        ExecutionLimits::default(),
+        RuntimeEnvironment {
+            services,
+            ..RuntimeEnvironment::default()
+        },
+    )
+}
+
+struct RestTestServer {
+    base_url: String,
+}
+
+impl RestTestServer {
+    fn start(handler: impl FnOnce(String) -> String + Send + 'static) -> Self {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind test server");
+        let port = listener.local_addr().expect("server address").port();
+        thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept request");
+            let mut buffer = [0; 4096];
+            let size = stream.read(&mut buffer).expect("read request");
+            let request = String::from_utf8_lossy(&buffer[..size]).to_string();
+            let response = handler(request);
+            stream
+                .write_all(response.as_bytes())
+                .expect("write response");
+        });
+
+        Self {
+            base_url: format!("http://127.0.0.1:{port}"),
+        }
+    }
+
+    fn base_url(&self) -> String {
+        self.base_url.clone()
+    }
+}
+
+fn http_response(status: u16, body: &str) -> String {
+    let reason = match status {
+        200 => "OK",
+        201 => "Created",
+        404 => "Not Found",
+        _ => "Status",
+    };
+    format!(
+        "HTTP/1.1 {status} {reason}\r\ncontent-type: application/json\r\ncontent-length: {}\r\n\r\n{body}",
+        body.len()
+    )
 }
