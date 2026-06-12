@@ -1,0 +1,21 @@
+name: bootstrap-smoke
+seed_events:
+  - id: seed-workflow-started
+    type: workflow.started
+    payload:
+      run_label: bootstrap
+      ok: true
+handlers:
+  - on: workflow.started
+    effects:
+      - type: assert
+        path: ok
+        equals: true
+      - type: emit
+        event_type: greeting.created
+        payload:
+          message: hello from the event engine
+  - on: greeting.created
+    effects:
+      - type: record
+        message: hello from the event engine

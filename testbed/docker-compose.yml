@@ -1,0 +1,33 @@
+services:
+  rest-service:
+    build:
+      context: ./services/rest-service
+    ports:
+      - "18101:9292"
+    environment:
+      RACK_ENV: development
+
+  graphql-service:
+    build:
+      context: ./services/graphql-service
+    ports:
+      - "18102:9292"
+    environment:
+      RACK_ENV: development
+
+  websocket-service:
+    build:
+      context: ./services/websocket-service
+    ports:
+      - "18103:9292"
+    environment:
+      RACK_ENV: development
+
+  goaws:
+    image: admiralpiett/goaws
+    ports:
+      - "18104:4100"
+    volumes:
+      - ./goaws/goaws.yaml:/conf/goaws.yaml:ro
+    environment:
+      GOAWS_CONFIG: /conf/goaws.yaml

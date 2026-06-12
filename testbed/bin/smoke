@@ -1,0 +1,42 @@
+#!/usr/bin/env sh
+set -eu
+
+REST_URL="${REST_URL:-http://localhost:18101}"
+GRAPHQL_URL="${GRAPHQL_URL:-http://localhost:18102}"
+GOAWS_URL="${GOAWS_URL:-http://localhost:18104}"
+WEBSOCKET_URL="${WEBSOCKET_URL:-ws://localhost:18103/ws}"
+
+curl -fsS "$REST_URL/health" >/dev/null
+curl -fsS "$GRAPHQL_URL/health" >/dev/null
+curl -fsS \
+  -H 'content-type: application/json' \
+  -d '{"query":"{ account(id: \"acct_001\") { id name users { id email } } }"}' \
+  "$GRAPHQL_URL/graphql" >/dev/null
+curl -fsS "$GOAWS_URL/" >/dev/null || true
+
+if ruby -rfaye/websocket -e 'exit 0' >/dev/null 2>&1; then
+  WEBSOCKET_URL="$WEBSOCKET_URL" ruby -rjson -rfaye/websocket -reventmachine -e '
+url = ENV.fetch("WEBSOCKET_URL")
+EM.run do
+  ws = Faye::WebSocket::Client.new(url)
+  timer = EM.add_timer(5) { abort "websocket smoke timed out" }
+  ws.on :open do |_event|
+    ws.send({ type: "ping", correlation_id: "smoke" }.to_json)
+  end
+  ws.on :message do |event|
+    payload = JSON.parse(event.data)
+    abort "unexpected websocket response: #{event.data}" unless payload["type"] == "pong"
+    timer.cancel
+    ws.close
+    EM.stop
+  end
+  ws.on :error do |event|
+    abort "websocket smoke failed: #{event.message}"
+  end
+end
+'
+else
+  printf '%s\n' 'skipping websocket smoke: Ruby faye-websocket gem is not installed on host'
+fi
+
+printf '%s\n' 'testbed smoke passed'

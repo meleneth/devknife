@@ -88,3 +88,9 @@ Likely stack: Tauri + Vue.
 - file-backed artifacts with stable draft schema
 - causal trace sufficient for failure diagnosis
 - Linux and Windows validation path
+
+## Phase 1 Implementation Note
+
+The first implementation pass has started Phase 1 with a synchronous in-memory engine, typed causal trace, YAML bootstrap workflow loading, and CLI `run`/`validate` commands. The local protocol testbed was also added early so REST, GraphQL, SQS, and WebSocket adapter work has deterministic fixtures when those phases begin.
+
+Real protocol effects remain deferred to later phases. Phase 3 should now focus on schema hardening, environment binding, diagnostics, and trace artifact persistence rather than first YAML parsing.

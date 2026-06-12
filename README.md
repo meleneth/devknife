@@ -48,3 +48,17 @@ See docs/008-devcontainer-and-tooling.md for details and troubleshooting.
 ## Syntax Warning
 
 Any syntax examples in this repository are illustrative draft shapes, not final language or schema commitments.
+
+## Initial Implementation
+
+The repository now contains a first Rust workspace with `devknife-core` and `devknife-cli`. The implemented engine is intentionally small: it runs in-memory `emit`, `record`, and `assert` effects, produces a typed causal trace, and avoids real REST, GraphQL, SQS, or WebSocket execution.
+
+Useful commands:
+
+- `cargo test`
+- `cargo run -p devknife-cli -- run examples/workflows/bootstrap.workflow.yaml`
+- `cargo run -p devknife-cli -- run examples/workflows/bootstrap.workflow.yaml --json`
+- `cargo run -p devknife-cli -- validate examples/workflows/bootstrap.workflow.yaml`
+- `docker compose -f testbed/docker-compose.yml config`
+
+The local testbed under `testbed/` is for future protocol adapter work and is not used by the current Rust engine.

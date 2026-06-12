@@ -1,0 +1,12 @@
+name: local
+values:
+  rest_base_url: http://localhost:18101
+  graphql_url: http://localhost:18102/graphql
+  websocket_url: ws://localhost:18103/ws
+  aws_region: us-east-1
+  aws_endpoint_url: http://localhost:18104
+  workflow_input_queue_url: http://localhost:18104/queue/devknife-workflow-input
+  workflow_results_queue_url: http://localhost:18104/queue/devknife-workflow-results
+secret_refs:
+  aws_access_key_id: devknife
+  aws_secret_access_key: devknife

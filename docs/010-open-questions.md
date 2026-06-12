@@ -39,3 +39,16 @@ Status: Active
 
 - Where should CLI stop and desktop UI begin once both exist?
 - Which capabilities are required by default vs opt-in per run?
+
+## Postman-Class, Not Postman-Compatible
+
+- Which familiar API client affordances should appear first: environments, variables, auth profiles, reusable operations, request history, response inspection, assertions/tests, or value extraction?
+- What minimum native concepts are needed before Postman import/export can be useful as migration tooling?
+- How should converters represent Postman collections and scripts without making them part of the core execution model?
+- What compatibility boundaries should be documented so users understand this is better-than-Postman, not a drop-in Postman clone?
+
+## Recently Narrowed
+
+- YAML is the initial bootstrap workflow authoring format, but schema versioning and strictness remain open.
+- GoAWS is the first local SQS fixture; whether LocalStack is needed later remains open.
+- The first meaningful cross-protocol demo should build on the new REST, GraphQL, WebSocket, and SQS fixtures after protocol adapters exist.

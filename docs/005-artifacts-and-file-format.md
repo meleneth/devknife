@@ -6,6 +6,8 @@ Status: Draft
 
 File-backed artifacts are the durable product surface. They should be versionable, diffable, reviewable, and executable.
 
+Artifacts may expose familiar API-client affordances, but their shape should follow the native model: operation definitions, environments, event handlers, effects, observations, assertions, causal traces, capabilities, and file-backed organization. Postman collection compatibility may be served later by converters, not by making Postman shapes the artifact foundation.
+
 ## Artifact Families (Planned)
 
 - project definition
@@ -50,3 +52,9 @@ Even in early parser stages, validation should check:
 ## Why No Cargo Workspace Yet
 
 No Cargo workspace is created in bootstrap because the implementation plan is still being established through invariants and ADRs. Creating crates now would imply architecture certainty that does not yet exist. The roadmap defines when to introduce workspace layout (Phase 1).
+
+## Implementation Update
+
+Phase 1 introduced the Cargo workspace. `crates/devknife-core` owns the initial typed workflow model, in-memory event engine, trace model, and YAML loader. `crates/devknife-cli` owns the `devknife` binary for `run` and `validate`.
+
+YAML is now the initial human-authored workflow format for bootstrap. The format is intentionally small and not yet a stable schema. The pipeline is YAML -> parsed config structs -> validation -> `Workflow` -> engine execution.

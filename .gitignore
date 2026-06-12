@@ -11,6 +11,7 @@ Thumbs.db
 **/target/
 **/*.rs.bk
 Cargo.lock
+!/Cargo.lock
 
 # Node
 node_modules/

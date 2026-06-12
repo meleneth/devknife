@@ -56,3 +56,15 @@ Some heavy desktop-specific Linux headers and runtime details may still be tuned
 - If Node or Rust versions appear missing, rebuild container: `Dev Containers: Rebuild Container`.
 - If package caches become inconsistent, remove the named Docker volumes and rebuild.
 - If extension recommendations do not apply, confirm both `.devcontainer/devcontainer.json` and `.vscode/extensions.json` are loaded in the container context.
+
+## Current Implementation Checks
+
+The initial Rust workspace can be checked with:
+
+- `cargo fmt`
+- `cargo test`
+- `cargo clippy --all-targets --all-features`
+- `cargo run -p devknife-cli -- run examples/workflows/bootstrap.workflow.yaml`
+- `docker compose -f testbed/docker-compose.yml config`
+
+The Docker Compose testbed is a development fixture for future protocol adapters, not a product runtime requirement.

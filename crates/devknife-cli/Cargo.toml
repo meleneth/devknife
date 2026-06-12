@@ -1,0 +1,16 @@
+[package]
+name = "devknife-cli"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "devknife"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+devknife-core = { path = "../devknife-core" }
+serde_json.workspace = true
