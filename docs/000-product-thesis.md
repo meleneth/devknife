@@ -25,9 +25,42 @@ This product exists to answer:
 
 ## Explicitly Not This
 
-- Not a Postman clone.
+- Not a drop-in Postman clone whose success is measured by Postman collection compatibility.
 - Not YAML shell scripts.
 - Not Docker compose for requests.
+
+## Postman-Class, Not Postman-Compatible
+
+This product should be Postman-class, but not Postman-compatible by default. It should feel understandable to developers who have used Postman, Insomnia, Bruno, curl, or internal API consoles without adopting any one tool's native formats, scripting model, or sync assumptions as the core architecture.
+
+Familiar affordances are not architectural surrender. Useful API-client concepts should not be rejected merely because Postman also has them, and recognizable Postman concepts should not be inherited merely because users know them. Every familiar concept must be re-expressed through this project's native model: operation definitions, environments, event handlers, effects, observations, assertions, causal traces, capabilities, and file-backed artifacts.
+
+Familiar API client affordances are intentionally in scope:
+
+- Projects or workspaces.
+- Collections or collection-like grouping.
+- Environments and variables.
+- Local secrets.
+- Auth profiles.
+- Reusable requests and operations.
+- Request history.
+- Response inspection.
+- Assertions and tests.
+- Extracting response values into later workflow steps.
+- Sharing workflow artifacts through files and version control.
+- Import/export eventually.
+
+Postman-specific assumptions are intentionally out of scope for the native model:
+
+- Postman's collection format is not the native workflow model.
+- Postman compatibility is not a bootstrap requirement.
+- Postman's scripting model is not the execution model.
+- Hosted sync is not the source of truth.
+- Drop-in replacement compatibility is not the success metric.
+
+The distinction is architectural. Native artifacts should be event-oriented, file-backed, typed where it matters, and traceable. Shaping the core model around Postman collection compatibility would pull the product toward request lists, format constraints, and scripting assumptions instead of causal workflows across REST, GraphQL, queues, and live sessions.
+
+Future Postman import/export converters may be useful migration tooling. They should live at the boundary: translating into and out of the native domain model without defining that model or contaminating the engine's internal concepts.
 
 ## Durable Product Surface
 
@@ -66,6 +99,8 @@ No engine implementation is included yet.
 - No scripting runtime yet.
 - No hosted sync service.
 - No Docker runtime requirement for users.
+- No Postman collection compatibility requirement.
+- No Postman scripting compatibility layer.
 - No attempt to support every protocol.
 - No first-class SOAP support.
 - No database adapter yet.

@@ -108,3 +108,13 @@ Docker is allowed for development but not required for end-user runtime.
 - avoid `Box<dyn Any>` style escape hatches for core model
 - keep protocol edges separate from workflow core
 - convert invariants into executable tests as implementation begins
+
+## 19) Postman-class, not Postman-compatible
+
+The product should support familiar API client affordances: projects/workspaces, collection-like grouping, environments, variables, local secrets, auth profiles, reusable operations, request history, response inspection, assertions/tests, value extraction between steps, file-backed sharing, and eventual import/export. Developers coming from Postman, Insomnia, Bruno, curl, or internal API consoles should find the tool understandable.
+
+Those affordances must be re-expressed through the native model: operation definitions, environments, event handlers, effects, observations, assertions, causal traces, capabilities, and file-backed artifacts. Useful affordances should not be rejected merely because Postman also has them. Postman-specific shapes should not be inherited merely because users recognize them.
+
+Postman collection format, Postman scripting compatibility, hosted sync as source of truth, and drop-in replacement behavior are not architectural constraints.
+
+Future Postman converters may exist at import/export boundaries. They must translate to and from native artifacts rather than shape the event-oriented, file-backed, typed, traceable core.

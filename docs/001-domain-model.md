@@ -14,6 +14,12 @@ Status: Draft
 - Capability: declared permission required for dangerous effects.
 - Environment: named values and secret references used to bind workflows for execution.
 
+## Familiar Affordance Mapping
+
+Familiar API-client concepts are welcome when they map into the native model. A request becomes an operation definition plus an effect invocation. A collection-like grouping becomes file-backed project or workflow organization. Tests become assertions whose results are observations. Chaining response values into later steps becomes explicit event emission, environment binding, or traceable value extraction.
+
+The model should remain understandable to developers coming from Postman, Insomnia, Bruno, curl, or internal API consoles without inheriting any one tool's file format, scripting runtime, or hosted sync assumptions.
+
 ## Event-Native Shape
 
 Linear workflows are a subset. A linear chain can be represented as events where each step emits exactly one next-step event.
