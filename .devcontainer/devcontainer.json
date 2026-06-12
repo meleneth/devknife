@@ -5,6 +5,10 @@
   },
   "remoteUser": "vscode",
   "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
+  "runArgs": [
+    "--security-opt=seccomp=unconfined",
+    "--security-opt=apparmor=unconfined"
+  ],
   "mounts": [
     "source=devknife-cargo-registry,target=/usr/local/cargo/registry,type=volume",
     "source=devknife-cargo-git,target=/usr/local/cargo/git,type=volume",

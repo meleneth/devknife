@@ -68,3 +68,7 @@ The initial Rust workspace can be checked with:
 - `docker compose -f testbed/docker-compose.yml config`
 
 The Docker Compose testbed is a development fixture for future protocol adapters, not a product runtime requirement.
+
+## Sandbox Notes
+
+The devcontainer uses relaxed Docker security options (`seccomp=unconfined` and `apparmor=unconfined`) so tools that rely on Linux user namespaces, including `bwrap`-based sandboxes, can create nested namespaces. After changing these settings, rebuild the devcontainer rather than only reloading the window.
