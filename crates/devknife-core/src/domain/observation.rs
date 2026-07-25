@@ -32,6 +32,17 @@ pub enum Observation {
         message: String,
         status: Option<u16>,
     },
+    GraphqlResponse {
+        operation: GraphqlOperationObservation,
+        response: GraphqlResponseObservation,
+        assertions: Vec<GraphqlAssertionObservation>,
+        emitted_events: Vec<Event>,
+    },
+    GraphqlFailed {
+        operation: GraphqlOperationObservation,
+        message: String,
+        status: Option<u16>,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -62,4 +73,31 @@ pub enum RestBody {
 pub enum RestAssertionObservation {
     StatusPassed { expected: u16, actual: u16 },
     StatusFailed { expected: u16, actual: u16 },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GraphqlOperationObservation {
+    pub service: Option<String>,
+    pub operation_name: Option<String>,
+    pub url: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct GraphqlResponseObservation {
+    pub status: u16,
+    #[serde(default)]
+    pub headers: BTreeMap<String, String>,
+    pub data: Option<Value>,
+    #[serde(default)]
+    pub errors: Vec<Value>,
+    pub extensions: Option<Value>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum GraphqlAssertionObservation {
+    StatusPassed { expected: u16, actual: u16 },
+    StatusFailed { expected: u16, actual: u16 },
+    NoErrorsPassed,
+    NoErrorsFailed { errors: Vec<Value> },
 }

@@ -120,6 +120,38 @@ fn validate_effect(
             }
             Ok(())
         }
+        Effect::Graphql(graphql) => {
+            if graphql
+                .service
+                .as_deref()
+                .unwrap_or_default()
+                .trim()
+                .is_empty()
+                && graphql
+                    .base_url
+                    .as_deref()
+                    .unwrap_or_default()
+                    .trim()
+                    .is_empty()
+            {
+                return Err(LoadError::Validation(format!(
+                    "handlers[{handler_index}].effects[{effect_index}] requires service or base_url"
+                )));
+            }
+            if graphql.query.trim().is_empty() {
+                return Err(LoadError::Validation(format!(
+                    "handlers[{handler_index}].effects[{effect_index}].query is required"
+                )));
+            }
+            for (emit_index, emit) in graphql.emits.iter().enumerate() {
+                if emit.event_type.trim().is_empty() {
+                    return Err(LoadError::Validation(format!(
+                        "handlers[{handler_index}].effects[{effect_index}].emits[{emit_index}].event_type is required"
+                    )));
+                }
+            }
+            Ok(())
+        }
         Effect::Emit { .. } | Effect::Record { .. } | Effect::Assert(_) => Ok(()),
     }
 }

@@ -70,7 +70,6 @@ class GraphqlService < Sinatra::Base
   end
 
   post "/graphql" do
-    request.body.rewind
     body = JSON.parse(request.body.read)
     result = TestbedSchema.execute(
       body.fetch("query"),

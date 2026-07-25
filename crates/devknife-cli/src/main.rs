@@ -1,10 +1,11 @@
 use std::{fs, path::PathBuf};
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
 use devknife_core::{
-    load_environment_yaml, load_workflow_yaml, validate_workflow, ExecutionLimits, Observation,
-    RestAssertionObservation, RunReport, RunStatus, Runner, TraceEntryKind,
+    load_environment_yaml, load_workflow_yaml, validate_workflow, ExecutionLimits,
+    GraphqlAssertionObservation, Observation, RestAssertionObservation, RunReport, RunStatus,
+    Runner, TraceEntryKind,
 };
 
 #[derive(Debug, Parser)]
@@ -46,6 +47,9 @@ fn main() -> Result<()> {
                 println!("{}", serde_json::to_string_pretty(&report)?);
             } else {
                 print_human_report(&report);
+            }
+            if report.status == RunStatus::Failed {
+                bail!("workflow run failed");
             }
         }
         Command::Validate { workflow } => {
@@ -170,6 +174,53 @@ fn trace_line(kind: &TraceEntryKind) -> Option<String> {
                 "effect {} {} {} failed: {}",
                 effect.name(),
                 operation.method,
+                operation.url,
+                message
+            )),
+            Observation::GraphqlResponse {
+                operation,
+                response,
+                assertions,
+                emitted_events,
+            } => {
+                let graphql_assertion = assertions.iter().next().map(|assertion| match assertion {
+                    GraphqlAssertionObservation::StatusPassed { expected, .. } => {
+                        format!("status {expected} passed")
+                    }
+                    GraphqlAssertionObservation::StatusFailed { expected, actual } => {
+                        format!("status expected {expected} failed with {actual}")
+                    }
+                    GraphqlAssertionObservation::NoErrorsPassed => "no GraphQL errors".to_string(),
+                    GraphqlAssertionObservation::NoErrorsFailed { errors } => {
+                        format!("{} GraphQL error(s)", errors.len())
+                    }
+                });
+                let emitted = emitted_events
+                    .iter()
+                    .map(|event| event.event_type.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                Some(format!(
+                    "effect {} {} {} -> {}{}{}",
+                    effect.name(),
+                    operation.operation_name.as_deref().unwrap_or("anonymous"),
+                    operation.url,
+                    response.status,
+                    graphql_assertion
+                        .map(|assertion| format!(" ({assertion})"))
+                        .unwrap_or_default(),
+                    if emitted.is_empty() {
+                        String::new()
+                    } else {
+                        format!(" emitted {emitted}")
+                    }
+                ))
+            }
+            Observation::GraphqlFailed {
+                operation, message, ..
+            } => Some(format!(
+                "effect {} {} failed: {}",
+                effect.name(),
                 operation.url,
                 message
             )),

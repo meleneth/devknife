@@ -22,4 +22,18 @@ pub enum EngineError {
     RestRequestFailed { operation: String, message: String },
     #[error("failed to emit REST event {event_type}: response path '{path}' was not found")]
     RestEmissionPathMissing { event_type: String, path: String },
+    #[error("missing GraphQL service binding for '{service}'")]
+    MissingGraphqlServiceBinding { service: String },
+    #[error("GraphQL effect requires service or base_url")]
+    MissingGraphqlBaseUrl,
+    #[error(
+        "unsupported GraphQL base URL '{base_url}': only http:// URLs are supported in this phase"
+    )]
+    UnsupportedGraphqlBaseUrl { base_url: String },
+    #[error("failed to build GraphQL request for {operation}: {message}")]
+    GraphqlRequestBuild { operation: String, message: String },
+    #[error("failed to execute GraphQL operation {operation}: {message}")]
+    GraphqlRequestFailed { operation: String, message: String },
+    #[error("failed to emit GraphQL event {event_type}: response path '{path}' was not found")]
+    GraphqlEmissionPathMissing { event_type: String, path: String },
 }

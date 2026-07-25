@@ -46,6 +46,8 @@ Goal: prove event loop without real network IO.
 - GraphQL-aware assertions
 - event emission from GraphQL data
 
+Implementation note: a first narrow adapter now exists for local HTTP GraphQL endpoints. It posts query documents with variables, treats GraphQL `errors` as run failures, emits events from `data.*` paths, and is covered by the local `graphql-service` fixture.
+
 ## Phase 5: WebSocket Adapter
 
 - connect named session

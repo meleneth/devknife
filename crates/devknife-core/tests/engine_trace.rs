@@ -1,6 +1,7 @@
 use devknife_core::{
-    Effect, Event, ExecutionLimits, Handler, Observation, RestAssertionObservation, RunStatus,
-    Runner, RuntimeEnvironment, ServiceBinding, TraceEntryKind, Workflow,
+    Effect, Event, ExecutionLimits, GraphqlAssertionObservation, Handler, Observation,
+    RestAssertionObservation, RunStatus, Runner, RuntimeEnvironment, ServiceBinding,
+    TraceEntryKind, Workflow,
 };
 use serde_json::json;
 use std::{
@@ -492,9 +493,158 @@ handlers:
     }));
 }
 
+#[test]
+fn graphql_effect_posts_query_and_emits_event_from_data() {
+    let server = RestTestServer::start(|request| {
+        assert!(request.starts_with("POST /graphql HTTP/1.1"));
+        assert!(request.contains(r#""operationName":"AccountUsers""#));
+        assert!(request.contains(r#""id":"acct_001""#));
+        http_response(
+            200,
+            r#"{"data":{"account":{"id":"acct_001","name":"Demo","users":[{"id":"user_001","email":"ava@example.test"}]}}}"#,
+        )
+    });
+    let workflow = devknife_core::load_workflow_yaml(
+        r#"
+name: graphql-emits
+seed_events:
+  - id: seed-load
+    type: account.users.load.requested
+    payload:
+      account_id: acct_001
+handlers:
+  - on: account.users.load.requested
+    effects:
+      - type: graphql
+        service: graphql
+        operation_name: AccountUsers
+        query: |
+          query AccountUsers($id: ID!) {
+            account(id: $id) {
+              id
+              name
+              users { id email }
+            }
+          }
+        variables:
+          id: "{{ event.payload.account_id }}"
+        expect:
+          status: 200
+        emits:
+          - event_type: account.users.loaded
+            payload:
+              account_id: data.account.id
+              users: data.account.users
+"#,
+    )
+    .expect("workflow parses");
+
+    let report = runner_with_graphql(server.base_url_with_path("/graphql")).run(workflow);
+
+    assert_eq!(report.status, RunStatus::Succeeded);
+    let emitted = report
+        .trace
+        .iter()
+        .find_map(|entry| match &entry.kind {
+            TraceEntryKind::EffectExecuted {
+                observation:
+                    Observation::GraphqlResponse {
+                        assertions,
+                        emitted_events,
+                        ..
+                    },
+                ..
+            } => {
+                assert!(assertions.iter().any(|assertion| matches!(
+                    assertion,
+                    GraphqlAssertionObservation::NoErrorsPassed
+                )));
+                emitted_events.first()
+            }
+            _ => None,
+        })
+        .expect("GraphQL emitted event");
+    assert_eq!(emitted.event_type, "account.users.loaded");
+    assert_eq!(emitted.payload["account_id"], json!("acct_001"));
+    assert_eq!(
+        emitted.payload["users"][0]["email"],
+        json!("ava@example.test")
+    );
+}
+
+#[test]
+fn graphql_errors_fail_run_even_with_http_200() {
+    let server = RestTestServer::start(|_| {
+        http_response(
+            200,
+            r#"{"data":{"account":null},"errors":[{"message":"account failed"}]}"#,
+        )
+    });
+    let workflow = devknife_core::load_workflow_yaml(
+        r#"
+name: graphql-errors
+seed_events:
+  - id: seed-load
+    type: account.users.load.requested
+handlers:
+  - on: account.users.load.requested
+    effects:
+      - type: graphql
+        service: graphql
+        operation_name: AccountUsers
+        query: |
+          query AccountUsers($id: ID!) {
+            account(id: $id) { id }
+          }
+        variables:
+          id: acct_001
+        expect:
+          status: 200
+"#,
+    )
+    .expect("workflow parses");
+
+    let report = runner_with_graphql(server.base_url_with_path("/graphql")).run(workflow);
+
+    assert_eq!(report.status, RunStatus::Failed);
+    assert!(report
+        .failure
+        .expect("failure")
+        .message
+        .contains("returned 1 error(s)"));
+    assert!(report.trace.iter().any(|entry| {
+        matches!(
+            &entry.kind,
+            TraceEntryKind::EffectExecuted {
+                observation:
+                    Observation::GraphqlResponse {
+                        assertions,
+                        ..
+                    },
+                ..
+            } if assertions.iter().any(|assertion| matches!(
+                assertion,
+                GraphqlAssertionObservation::NoErrorsFailed { errors } if errors.len() == 1
+            ))
+        )
+    }));
+}
+
 fn runner_with_rest(base_url: String) -> Runner {
     let mut services = BTreeMap::new();
     services.insert("rest".to_string(), ServiceBinding { base_url });
+    Runner::with_environment(
+        ExecutionLimits::default(),
+        RuntimeEnvironment {
+            services,
+            ..RuntimeEnvironment::default()
+        },
+    )
+}
+
+fn runner_with_graphql(base_url: String) -> Runner {
+    let mut services = BTreeMap::new();
+    services.insert("graphql".to_string(), ServiceBinding { base_url });
     Runner::with_environment(
         ExecutionLimits::default(),
         RuntimeEnvironment {
@@ -530,6 +680,10 @@ impl RestTestServer {
 
     fn base_url(&self) -> String {
         self.base_url.clone()
+    }
+
+    fn base_url_with_path(&self, path: &str) -> String {
+        format!("{}{path}", self.base_url)
     }
 }
 

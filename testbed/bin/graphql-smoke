@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+docker compose -f testbed/docker-compose.yml up --build -d graphql-service
+trap 'docker compose -f testbed/docker-compose.yml down' EXIT
+
+for _ in {1..30}; do
+  if curl --fail --silent --show-error http://localhost:18102/health >/dev/null 2>&1; then
+    break
+  fi
+  sleep 1
+done
+
+curl --fail --silent --show-error http://localhost:18102/health >/dev/null
+cargo run -p devknife-cli -- run examples/workflows/graphql-smoke.workflow.yaml

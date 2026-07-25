@@ -1,6 +1,6 @@
 # devknife Local Testbed
 
-This testbed provides deterministic local protocol fixtures for adapter work. The Rust engine now calls the REST service; GraphQL, WebSocket, and GoAWS remain future adapter fixtures.
+This testbed provides deterministic local protocol fixtures for adapter work. The Rust engine now calls the REST and GraphQL services; WebSocket and GoAWS remain future adapter fixtures.
 
 ## Start
 
@@ -53,8 +53,17 @@ cargo run -p devknife-cli -- run examples/workflows/rest-smoke.workflow.yaml
 docker compose -f testbed/docker-compose.yml down
 ```
 
+GraphQL-only engine smoke:
+
+```sh
+docker compose -f testbed/docker-compose.yml up -d graphql-service
+curl http://localhost:18102/health
+cargo run -p devknife-cli -- run examples/workflows/graphql-smoke.workflow.yaml
+docker compose -f testbed/docker-compose.yml down
+```
+
 ## Current Limits
 
-- GraphQL, WebSocket, and GoAWS fixtures are not wired into `devknife-core` yet.
+- WebSocket and GoAWS fixtures are not wired into `devknife-core` yet.
 - GoAWS configuration may need minor adjustment if the upstream image changes its config schema.
 - WebSocket fixture is intentionally simple: JSON `ping` returns `pong`, JSON `subscribe` returns `subscription.confirmed`, and other JSON messages are echoed.

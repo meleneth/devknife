@@ -9,6 +9,7 @@ pub enum Effect {
     Record { message: String },
     Assert(AssertEffect),
     Rest(RestEffect),
+    Graphql(GraphqlEffect),
 }
 
 impl Effect {
@@ -18,6 +19,7 @@ impl Effect {
             Self::Record { .. } => "record",
             Self::Assert(_) => "assert",
             Self::Rest(_) => "rest",
+            Self::Graphql(_) => "graphql",
         }
     }
 }
@@ -78,6 +80,33 @@ pub struct RestExpectations {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct RestEventEmission {
+    pub event_type: String,
+    #[serde(default)]
+    pub payload: BTreeMap<String, ResponsePath>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct GraphqlEffect {
+    pub service: Option<String>,
+    pub base_url: Option<String>,
+    pub operation_name: Option<String>,
+    pub query: String,
+    #[serde(default)]
+    pub variables: Value,
+    #[serde(default)]
+    pub expect: GraphqlExpectations,
+    #[serde(default)]
+    pub emits: Vec<GraphqlEventEmission>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GraphqlExpectations {
+    pub status: Option<u16>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct GraphqlEventEmission {
     pub event_type: String,
     #[serde(default)]
     pub payload: BTreeMap<String, ResponsePath>,

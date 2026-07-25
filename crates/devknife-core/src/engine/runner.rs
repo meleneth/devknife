@@ -9,9 +9,11 @@ use serde_json::Value;
 use uuid::Uuid;
 
 use crate::domain::{
-    AssertEffect, Effect, Event, EventCause, Observation, ResponsePath, RestAssertionObservation,
-    RestBody, RestEffect, RestMethod, RestOperationObservation, RestResponseObservation, RunReport,
-    RunStatus, RuntimeEnvironment, TraceEntry, TraceEntryKind, TraceFailure, Workflow,
+    AssertEffect, Effect, Event, EventCause, GraphqlAssertionObservation, GraphqlEffect,
+    GraphqlOperationObservation, GraphqlResponseObservation, Observation, ResponsePath,
+    RestAssertionObservation, RestBody, RestEffect, RestOperationObservation,
+    RestResponseObservation, RunReport, RunStatus, RuntimeEnvironment, TraceEntry, TraceEntryKind,
+    TraceFailure, Workflow,
 };
 
 use super::EngineError;
@@ -141,6 +143,9 @@ impl Runner {
                     let emitted = match &observation {
                         Observation::EmittedEvents { events } => events.clone(),
                         Observation::RestResponse { emitted_events, .. } => emitted_events.clone(),
+                        Observation::GraphqlResponse { emitted_events, .. } => {
+                            emitted_events.clone()
+                        }
                         _ => Vec::new(),
                     };
 
@@ -220,6 +225,9 @@ impl Runner {
             Effect::Assert(assertion) => Ok(evaluate_assertion(assertion, &event.payload)),
             Effect::Rest(rest) => {
                 self.execute_rest_effect(rest, event, trace_entry_id, created_events)
+            }
+            Effect::Graphql(graphql) => {
+                self.execute_graphql_effect(graphql, event, trace_entry_id, created_events)
             }
         }
     }
@@ -323,6 +331,125 @@ impl Runner {
         Ok(emitted_events)
     }
 
+    fn execute_graphql_effect(
+        &self,
+        graphql: &GraphqlEffect,
+        event: &Event,
+        trace_entry_id: &str,
+        created_events: &mut usize,
+    ) -> Result<Observation, EngineError> {
+        let request = match build_graphql_request(graphql, event, &self.environment) {
+            Ok(request) => request,
+            Err(error) => {
+                return Ok(Observation::GraphqlFailed {
+                    operation: fallback_graphql_operation(graphql, event, &self.environment),
+                    message: error.to_string(),
+                    status: None,
+                });
+            }
+        };
+        let raw_response = match execute_http_request(&request) {
+            Ok(response) => response,
+            Err(error) => {
+                return Ok(Observation::GraphqlFailed {
+                    operation: GraphqlOperationObservation {
+                        service: graphql.service.clone(),
+                        operation_name: graphql.operation_name.clone(),
+                        url: request.url,
+                    },
+                    message: error.to_string(),
+                    status: None,
+                });
+            }
+        };
+        let status = raw_response.status;
+        let response = match graphql_response_from_http(&request.operation, raw_response) {
+            Ok(response) => response,
+            Err(error) => {
+                return Ok(Observation::GraphqlFailed {
+                    operation: GraphqlOperationObservation {
+                        service: graphql.service.clone(),
+                        operation_name: graphql.operation_name.clone(),
+                        url: request.url,
+                    },
+                    message: error.to_string(),
+                    status: Some(status),
+                });
+            }
+        };
+        let assertions = evaluate_graphql_assertions(graphql, &response);
+        let emitted_events = self.build_graphql_emitted_events(
+            graphql,
+            event,
+            trace_entry_id,
+            created_events,
+            &response,
+        )?;
+
+        Ok(Observation::GraphqlResponse {
+            operation: GraphqlOperationObservation {
+                service: graphql.service.clone(),
+                operation_name: graphql.operation_name.clone(),
+                url: request.url,
+            },
+            response,
+            assertions,
+            emitted_events,
+        })
+    }
+
+    fn build_graphql_emitted_events(
+        &self,
+        graphql: &GraphqlEffect,
+        event: &Event,
+        trace_entry_id: &str,
+        created_events: &mut usize,
+        response: &GraphqlResponseObservation,
+    ) -> Result<Vec<Event>, EngineError> {
+        let mut emitted_events = Vec::new();
+
+        for emission in &graphql.emits {
+            if *created_events >= self.limits.max_events {
+                return Err(EngineError::MaxEventCountExceeded {
+                    limit: self.limits.max_events,
+                });
+            }
+
+            let next_depth = event.depth + 1;
+            if next_depth > self.limits.max_depth {
+                return Err(EngineError::MaxDepthExceeded {
+                    limit: self.limits.max_depth,
+                });
+            }
+
+            let mut payload = serde_json::Map::new();
+            for (field, path) in &emission.payload {
+                let value = lookup_graphql_response_path(response, path)
+                    .cloned()
+                    .ok_or_else(|| EngineError::GraphqlEmissionPathMissing {
+                        event_type: emission.event_type.clone(),
+                        path: path.as_path().to_string(),
+                    })?;
+                payload.insert(field.clone(), value);
+            }
+
+            *created_events += 1;
+            emitted_events.push(Event {
+                id: format!("event-{}", created_events),
+                event_type: emission.event_type.clone(),
+                payload: Value::Object(payload),
+                caused_by: Some(EventCause {
+                    event_id: event.id.clone(),
+                    trace_entry_id: trace_entry_id.to_string(),
+                }),
+                sequence: *created_events as u64,
+                depth: next_depth,
+            });
+        }
+
+        Ok(emitted_events)
+    }
+
     fn check_step_limit(&self, processed_steps: usize) -> Result<(), EngineError> {
         if processed_steps >= self.limits.max_steps {
             Err(EngineError::MaxStepCountExceeded {
@@ -362,6 +489,14 @@ fn observation_failed(observation: &Observation) -> bool {
             .iter()
             .any(|assertion| matches!(assertion, RestAssertionObservation::StatusFailed { .. })),
         Observation::RestFailed { .. } => true,
+        Observation::GraphqlResponse { assertions, .. } => assertions.iter().any(|assertion| {
+            matches!(
+                assertion,
+                GraphqlAssertionObservation::StatusFailed { .. }
+                    | GraphqlAssertionObservation::NoErrorsFailed { .. }
+            )
+        }),
+        Observation::GraphqlFailed { .. } => true,
         _ => false,
     }
 }
@@ -412,6 +547,54 @@ fn observation_failure_message(observation: &Observation) -> String {
                 .unwrap_or_default(),
             message
         ),
+        Observation::GraphqlResponse {
+            operation,
+            response,
+            assertions,
+            ..
+        } => assertions
+            .iter()
+            .find_map(|assertion| match assertion {
+                GraphqlAssertionObservation::StatusFailed { expected, actual } => Some(format!(
+                    "GraphQL assertion failed during workflow run: {} at {}; status expected {}, actual {}",
+                    operation
+                        .operation_name
+                        .as_deref()
+                        .unwrap_or("anonymous operation"),
+                    operation.url,
+                    expected,
+                    actual
+                )),
+                GraphqlAssertionObservation::NoErrorsFailed { errors } => Some(format!(
+                    "GraphQL operation {} at {} returned {} error(s)",
+                    operation
+                        .operation_name
+                        .as_deref()
+                        .unwrap_or("anonymous operation"),
+                    operation.url,
+                    errors.len()
+                )),
+                GraphqlAssertionObservation::StatusPassed { .. }
+                | GraphqlAssertionObservation::NoErrorsPassed => None,
+            })
+            .unwrap_or_else(|| {
+                format!(
+                    "GraphQL effect failed during workflow run: {} returned status {}",
+                    operation.url, response.status
+                )
+            }),
+        Observation::GraphqlFailed {
+            operation,
+            message,
+            status,
+        } => format!(
+            "GraphQL effect failed during workflow run: {}{}: {}",
+            operation.url,
+            status
+                .map(|status| format!(" returned status {status}"))
+                .unwrap_or_default(),
+            message
+        ),
         _ => "workflow run failed".to_string(),
     }
 }
@@ -437,6 +620,37 @@ fn evaluate_rest_assertions(
         })
         .into_iter()
         .collect()
+}
+
+fn evaluate_graphql_assertions(
+    graphql: &GraphqlEffect,
+    response: &GraphqlResponseObservation,
+) -> Vec<GraphqlAssertionObservation> {
+    let mut assertions = Vec::new();
+
+    if let Some(expected) = graphql.expect.status {
+        if expected == response.status {
+            assertions.push(GraphqlAssertionObservation::StatusPassed {
+                expected,
+                actual: response.status,
+            });
+        } else {
+            assertions.push(GraphqlAssertionObservation::StatusFailed {
+                expected,
+                actual: response.status,
+            });
+        }
+    }
+
+    if response.errors.is_empty() {
+        assertions.push(GraphqlAssertionObservation::NoErrorsPassed);
+    } else {
+        assertions.push(GraphqlAssertionObservation::NoErrorsFailed {
+            errors: response.errors.clone(),
+        });
+    }
+
+    assertions
 }
 
 fn lookup_payload_path<'a>(payload: &'a Value, path: &str) -> Option<&'a Value> {
@@ -478,10 +692,30 @@ fn lookup_response_path<'a>(
     Some(current)
 }
 
+fn lookup_graphql_response_path<'a>(
+    response: &'a GraphqlResponseObservation,
+    response_path: &ResponsePath,
+) -> Option<&'a Value> {
+    let path = response_path.as_path();
+    let trimmed = path.strip_prefix("$.").unwrap_or(path);
+    let data_path = trimmed.strip_prefix("data.")?;
+    let data = response.data.as_ref()?;
+
+    if data_path.is_empty() {
+        return Some(data);
+    }
+
+    let mut current = data;
+    for segment in data_path.split('.') {
+        current = current.get(segment)?;
+    }
+    Some(current)
+}
+
 #[derive(Debug)]
 struct BuiltRestRequest {
     operation: String,
-    method: RestMethod,
+    method: String,
     host: String,
     port: u16,
     path_and_query: String,
@@ -553,7 +787,7 @@ fn build_rest_request(
 
     Ok(BuiltRestRequest {
         operation,
-        method: rest.method.clone(),
+        method: rest.method.as_str().to_string(),
         host: base.host,
         port: base.port,
         path_and_query,
@@ -594,11 +828,116 @@ fn fallback_rest_operation(
     }
 }
 
+fn build_graphql_request(
+    graphql: &GraphqlEffect,
+    event: &Event,
+    environment: &RuntimeEnvironment,
+) -> Result<BuiltRestRequest, EngineError> {
+    let operation = graphql
+        .operation_name
+        .clone()
+        .unwrap_or_else(|| "anonymous".to_string());
+    let base_url_template = graphql
+        .base_url
+        .clone()
+        .or_else(|| {
+            graphql
+                .service
+                .as_ref()
+                .and_then(|service| environment.services.get(service))
+                .map(|binding| binding.base_url.clone())
+        })
+        .ok_or_else(|| {
+            graphql
+                .service
+                .as_ref()
+                .map(|service| EngineError::MissingGraphqlServiceBinding {
+                    service: service.clone(),
+                })
+                .unwrap_or(EngineError::MissingGraphqlBaseUrl)
+        })?;
+
+    let base_url = interpolate_string(&base_url_template, event, environment, &operation)
+        .map_err(|error| graphql_build_error(&operation, error))?;
+    let base = parse_graphql_base_url(&base_url)?;
+    let query = interpolate_string(&graphql.query, event, environment, &operation)
+        .map_err(|error| graphql_build_error(&operation, error))?;
+    let variables = interpolate_json(&graphql.variables, event, environment, &operation)
+        .map_err(|error| graphql_build_error(&operation, error))?;
+
+    let mut body = serde_json::Map::new();
+    body.insert("query".to_string(), Value::String(query));
+    body.insert("variables".to_string(), variables);
+    if let Some(operation_name) = &graphql.operation_name {
+        body.insert(
+            "operationName".to_string(),
+            Value::String(operation_name.clone()),
+        );
+    }
+
+    Ok(BuiltRestRequest {
+        operation,
+        method: "POST".to_string(),
+        host: base.host,
+        port: base.port,
+        path_and_query: base.path,
+        headers: BTreeMap::new(),
+        body: Some(serde_json::to_string(&Value::Object(body)).expect("JSON values serialize")),
+        url: base.url,
+    })
+}
+
+fn fallback_graphql_operation(
+    graphql: &GraphqlEffect,
+    event: &Event,
+    environment: &RuntimeEnvironment,
+) -> GraphqlOperationObservation {
+    let base_url = graphql
+        .base_url
+        .clone()
+        .or_else(|| {
+            graphql
+                .service
+                .as_ref()
+                .and_then(|service| environment.services.get(service))
+                .map(|binding| binding.base_url.clone())
+        })
+        .unwrap_or_else(|| "<unbound>".to_string());
+    let url = interpolate_string(
+        &base_url,
+        event,
+        environment,
+        graphql.operation_name.as_deref().unwrap_or("graphql"),
+    )
+    .unwrap_or(base_url);
+
+    GraphqlOperationObservation {
+        service: graphql.service.clone(),
+        operation_name: graphql.operation_name.clone(),
+        url,
+    }
+}
+
+fn graphql_build_error(operation: &str, error: EngineError) -> EngineError {
+    EngineError::GraphqlRequestBuild {
+        operation: operation.to_string(),
+        message: error.to_string(),
+    }
+}
+
 #[derive(Debug)]
 struct HttpBaseUrl {
     origin: String,
     host: String,
     port: u16,
+}
+
+#[derive(Debug)]
+struct GraphqlBaseUrl {
+    host: String,
+    port: u16,
+    path: String,
+    url: String,
 }
 
 fn parse_http_base_url(base_url: &str) -> Result<HttpBaseUrl, EngineError> {
@@ -633,6 +972,37 @@ fn parse_http_base_url(base_url: &str) -> Result<HttpBaseUrl, EngineError> {
     })
 }
 
+fn parse_graphql_base_url(base_url: &str) -> Result<GraphqlBaseUrl, EngineError> {
+    let without_scheme =
+        base_url
+            .strip_prefix("http://")
+            .ok_or_else(|| EngineError::UnsupportedGraphqlBaseUrl {
+                base_url: base_url.to_string(),
+            })?;
+    let (authority, path) = without_scheme
+        .split_once('/')
+        .map(|(authority, path)| (authority, format!("/{path}")))
+        .unwrap_or((without_scheme, "/graphql".to_string()));
+    let authority = authority.trim_end_matches('/');
+    let (host, port) = match authority.rsplit_once(':') {
+        Some((host, port)) => (
+            host.to_string(),
+            port.parse::<u16>()
+                .map_err(|error| EngineError::UnsupportedGraphqlBaseUrl {
+                    base_url: format!("{base_url} ({error})"),
+                })?,
+        ),
+        None => (authority.to_string(), 80),
+    };
+
+    Ok(GraphqlBaseUrl {
+        host: host.clone(),
+        port,
+        path: path.clone(),
+        url: format!("http://{}:{}{}", host, port, path),
+    })
+}
+
 fn execute_http_request(
     request: &BuiltRestRequest,
 ) -> Result<RestResponseObservation, EngineError> {
@@ -659,9 +1029,7 @@ fn execute_http_request(
     let body = request.body.as_deref().unwrap_or("");
     let mut http_request = format!(
         "{} {} HTTP/1.1\r\nHost: {}\r\nConnection: close\r\nAccept: application/json\r\n",
-        request.method.as_str(),
-        request.path_and_query,
-        request.host
+        request.method, request.path_and_query, request.host
     );
     for (key, value) in &request.headers {
         http_request.push_str(&format!("{key}: {value}\r\n"));
@@ -748,6 +1116,34 @@ fn parse_http_response(
         status,
         headers,
         body,
+    })
+}
+
+fn graphql_response_from_http(
+    operation: &str,
+    response: RestResponseObservation,
+) -> Result<GraphqlResponseObservation, EngineError> {
+    let RestBody::Json { value } = response.body else {
+        return Err(EngineError::GraphqlRequestFailed {
+            operation: operation.to_string(),
+            message: "GraphQL response body was not JSON".to_string(),
+        });
+    };
+
+    let data = value.get("data").cloned();
+    let errors = value
+        .get("errors")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let extensions = value.get("extensions").cloned();
+
+    Ok(GraphqlResponseObservation {
+        status: response.status,
+        headers: response.headers,
+        data,
+        errors,
+        extensions,
     })
 }
 

@@ -38,7 +38,7 @@ OpenAPI import is a future capability.
 
 ## GraphQL
 
-Implementation status: future adapter, not executable yet.
+Implementation status: narrow real adapter.
 
 Modeled with GraphQL-native concepts:
 
@@ -52,6 +52,23 @@ Modeled with GraphQL-native concepts:
 - path-aware errors
 
 GraphQL over HTTP 200 with `errors` must not be treated as generic success.
+
+Current implementation supports:
+
+- named service binding to an HTTP GraphQL URL through environment YAML
+- query/mutation document submission over HTTP POST
+- optional `operation_name`
+- JSON variables with minimal interpolation from `event.payload.*` and `env.*`
+- typed response observation with HTTP status, headers, `data`, `errors`, and `extensions`
+- status equality assertion
+- automatic failure when the GraphQL response contains `errors`, even with HTTP 200
+- event emission from GraphQL data paths such as `data.account.id`
+
+Current limits:
+
+- `http://` only; TLS support is future work
+- no schema import, validation, persisted operations, fragments tooling, auth helpers, or retries
+- no configurable partial-success policy yet
 
 ## SQS
 

@@ -1,5 +1,5 @@
-# Illustrative draft only. REST has a narrow executable adapter now, but this
-# multi-protocol GraphQL/SQS/WebSocket scenario is still not executable.
+# Illustrative draft only. REST and GraphQL have narrow executable adapters now,
+# but this multi-protocol SQS/WebSocket scenario is still not executable.
 name: future-rest-graphql-sqs-websocket
 seed_events:
   - id: seed-demo
