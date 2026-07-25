@@ -10,7 +10,7 @@ use uuid::Uuid;
 
 use crate::domain::{
     AssertEffect, Effect, Event, EventCause, GraphqlAssertionObservation, GraphqlEffect,
-    GraphqlOperationObservation, GraphqlResponseObservation, Observation, ResponsePath,
+    GraphqlOperationObservation, GraphqlResponseObservation, JsonPathSelector, Observation,
     RestAssertionObservation, RestBody, RestEffect, RestOperationObservation,
     RestResponseObservation, RunReport, RunStatus, RuntimeEnvironment, TraceEntry, TraceEntryKind,
     TraceFailure, Workflow,
@@ -288,6 +288,7 @@ impl Runner {
         response: &RestResponseObservation,
     ) -> Result<Vec<Event>, EngineError> {
         let mut emitted_events = Vec::new();
+        let extraction_document = rest_extraction_document(response);
 
         for emission in &rest.emits {
             if *created_events >= self.limits.max_events {
@@ -305,12 +306,18 @@ impl Runner {
 
             let mut payload = serde_json::Map::new();
             for (field, path) in &emission.payload {
-                let value = lookup_response_path(response, path)
-                    .cloned()
-                    .ok_or_else(|| EngineError::RestEmissionPathMissing {
-                        event_type: emission.event_type.clone(),
-                        path: path.as_path().to_string(),
+                let value =
+                    select_json_path_value(&extraction_document, path).map_err(|error| {
+                        EngineError::RestEmissionPathInvalid {
+                            event_type: emission.event_type.clone(),
+                            path: path.from.clone(),
+                            message: error,
+                        }
                     })?;
+                let value = value.ok_or_else(|| EngineError::RestEmissionPathMissing {
+                    event_type: emission.event_type.clone(),
+                    path: path.from.clone(),
+                })?;
                 payload.insert(field.clone(), value);
             }
 
@@ -407,6 +414,7 @@ impl Runner {
         response: &GraphqlResponseObservation,
     ) -> Result<Vec<Event>, EngineError> {
         let mut emitted_events = Vec::new();
+        let extraction_document = graphql_extraction_document(response);
 
         for emission in &graphql.emits {
             if *created_events >= self.limits.max_events {
@@ -424,12 +432,18 @@ impl Runner {
 
             let mut payload = serde_json::Map::new();
             for (field, path) in &emission.payload {
-                let value = lookup_graphql_response_path(response, path)
-                    .cloned()
-                    .ok_or_else(|| EngineError::GraphqlEmissionPathMissing {
-                        event_type: emission.event_type.clone(),
-                        path: path.as_path().to_string(),
+                let value =
+                    select_json_path_value(&extraction_document, path).map_err(|error| {
+                        EngineError::GraphqlEmissionPathInvalid {
+                            event_type: emission.event_type.clone(),
+                            path: path.from.clone(),
+                            message: error,
+                        }
                     })?;
+                let value = value.ok_or_else(|| EngineError::GraphqlEmissionPathMissing {
+                    event_type: emission.event_type.clone(),
+                    path: path.from.clone(),
+                })?;
                 payload.insert(field.clone(), value);
             }
 
@@ -670,46 +684,45 @@ fn lookup_payload_path<'a>(payload: &'a Value, path: &str) -> Option<&'a Value> 
     Some(current)
 }
 
-fn lookup_response_path<'a>(
-    response: &'a RestResponseObservation,
-    response_path: &ResponsePath,
-) -> Option<&'a Value> {
-    let path = response_path.as_path();
-    let trimmed = path.strip_prefix("$.").unwrap_or(path);
-    let body_path = trimmed.strip_prefix("body.")?;
-    let RestBody::Json { value } = &response.body else {
-        return None;
+fn rest_extraction_document(response: &RestResponseObservation) -> Value {
+    let body = match &response.body {
+        RestBody::Json { value } => value.clone(),
+        RestBody::Text { value } => Value::String(value.clone()),
+        RestBody::Empty => Value::Null,
     };
 
-    if body_path.is_empty() {
-        return Some(value);
-    }
-
-    let mut current = value;
-    for segment in body_path.split('.') {
-        current = current.get(segment)?;
-    }
-    Some(current)
+    serde_json::json!({
+        "status": response.status,
+        "headers": response.headers,
+        "body": body,
+    })
 }
 
-fn lookup_graphql_response_path<'a>(
-    response: &'a GraphqlResponseObservation,
-    response_path: &ResponsePath,
-) -> Option<&'a Value> {
-    let path = response_path.as_path();
-    let trimmed = path.strip_prefix("$.").unwrap_or(path);
-    let data_path = trimmed.strip_prefix("data.")?;
-    let data = response.data.as_ref()?;
+fn graphql_extraction_document(response: &GraphqlResponseObservation) -> Value {
+    serde_json::json!({
+        "status": response.status,
+        "headers": response.headers,
+        "data": response.data,
+        "errors": response.errors,
+        "extensions": response.extensions,
+    })
+}
 
-    if data_path.is_empty() {
-        return Some(data);
-    }
+fn select_json_path_value(
+    document: &Value,
+    selector: &JsonPathSelector,
+) -> Result<Option<Value>, String> {
+    let query = jsonpath_rfc9535::JsonPath::parse(&selector.from)
+        .map_err(|error| format!("failed to parse JSONPath '{}': {error}", selector.from))?;
+    let values = query.query_values(document);
 
-    let mut current = data;
-    for segment in data_path.split('.') {
-        current = current.get(segment)?;
-    }
-    Some(current)
+    Ok(match values.as_slice() {
+        [] => None,
+        [value] => Some((*value).clone()),
+        values => Some(Value::Array(
+            values.iter().map(|value| (*value).clone()).collect(),
+        )),
+    })
 }
 
 #[derive(Debug)]

@@ -76,7 +76,8 @@ Current executable REST effect shape:
   emits:
     - event_type: account.loaded
       payload:
-        account_id: body.id
+        account_id:
+          from: $.body.id
 ```
 
 Current environment binding shape:

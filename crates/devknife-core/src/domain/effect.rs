@@ -82,7 +82,7 @@ pub struct RestExpectations {
 pub struct RestEventEmission {
     pub event_type: String,
     #[serde(default)]
-    pub payload: BTreeMap<String, ResponsePath>,
+    pub payload: BTreeMap<String, JsonPathSelector>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -109,21 +109,10 @@ pub struct GraphqlExpectations {
 pub struct GraphqlEventEmission {
     pub event_type: String,
     #[serde(default)]
-    pub payload: BTreeMap<String, ResponsePath>,
+    pub payload: BTreeMap<String, JsonPathSelector>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum ResponsePath {
-    Path(String),
-    From { from: String },
-}
-
-impl ResponsePath {
-    pub fn as_path(&self) -> &str {
-        match self {
-            Self::Path(path) => path,
-            Self::From { from } => from,
-        }
-    }
+pub struct JsonPathSelector {
+    pub from: String,
 }

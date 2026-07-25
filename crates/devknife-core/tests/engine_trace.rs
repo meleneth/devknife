@@ -218,6 +218,56 @@ handlers:
 }
 
 #[test]
+fn response_emission_requires_jsonpath_from_selector() {
+    let shorthand = devknife_core::load_workflow_yaml(
+        r#"
+name: rejects-shorthand
+seed_events:
+  - type: account.load.requested
+handlers:
+  - on: account.load.requested
+    effects:
+      - type: rest
+        base_url: http://localhost:18101
+        method: GET
+        path: /accounts/acct_001
+        emits:
+          - event_type: account.loaded
+            payload:
+              account_id: body.id
+"#,
+    );
+    assert!(
+        shorthand.is_err(),
+        "legacy dot-path shorthand must not be accepted"
+    );
+
+    let invalid_jsonpath = devknife_core::load_workflow_yaml(
+        r#"
+name: rejects-invalid-jsonpath
+seed_events:
+  - type: account.load.requested
+handlers:
+  - on: account.load.requested
+    effects:
+      - type: rest
+        base_url: http://localhost:18101
+        method: GET
+        path: /accounts/acct_001
+        emits:
+          - event_type: account.loaded
+            payload:
+              account_id:
+                from: body.id
+"#,
+    );
+    assert!(
+        invalid_jsonpath.is_err(),
+        "selectors must be RFC 9535 JSONPath"
+    );
+}
+
+#[test]
 fn rest_effect_builds_request_from_event_and_environment() {
     let server = RestTestServer::start(|request| {
         assert!(request.starts_with("POST /accounts?source=test HTTP/1.1"));
@@ -302,9 +352,10 @@ handlers:
         emits:
           - event_type: account.loaded
             payload:
-              account_id: body.id
+              account_id:
+                from: $.body.id
               name:
-                from: body.name
+                from: $.body.name
 "#,
     )
     .expect("workflow parses");
@@ -447,7 +498,8 @@ handlers:
         emits:
           - event_type: account.loaded
             payload:
-              account_id: body.id
+              account_id:
+                from: $.body.id
 "#,
     )
     .expect("workflow parses");
@@ -533,8 +585,12 @@ handlers:
         emits:
           - event_type: account.users.loaded
             payload:
-              account_id: data.account.id
-              users: data.account.users
+              account_id:
+                from: $.data.account.id
+              first_user_email:
+                from: $.data.account.users[0].email
+              users:
+                from: $.data.account.users
 "#,
     )
     .expect("workflow parses");
@@ -566,6 +622,10 @@ handlers:
         .expect("GraphQL emitted event");
     assert_eq!(emitted.event_type, "account.users.loaded");
     assert_eq!(emitted.payload["account_id"], json!("acct_001"));
+    assert_eq!(
+        emitted.payload["first_user_email"],
+        json!("ava@example.test")
+    );
     assert_eq!(
         emitted.payload["users"][0]["email"],
         json!("ava@example.test")

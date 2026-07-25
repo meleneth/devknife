@@ -11,3 +11,4 @@ serde_json.workspace = true
 serde_yml.workspace = true
 thiserror.workspace = true
 uuid.workspace = true
+jsonpath-rfc9535.workspace = true

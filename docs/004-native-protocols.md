@@ -26,7 +26,7 @@ Current implementation supports:
 - minimal string interpolation from `event.payload.*` and `env.*`
 - typed response observation with status, headers, JSON body when possible, and text/empty fallback
 - status equality assertion
-- event emission from JSON response paths such as `body.id`
+- event emission from RFC 9535 JSONPath selectors such as `$.body.id`
 
 Current limits:
 
@@ -62,7 +62,7 @@ Current implementation supports:
 - typed response observation with HTTP status, headers, `data`, `errors`, and `extensions`
 - status equality assertion
 - automatic failure when the GraphQL response contains `errors`, even with HTTP 200
-- event emission from GraphQL data paths such as `data.account.id`
+- event emission from RFC 9535 JSONPath selectors such as `$.data.account.id`
 
 Current limits:
 

@@ -25,9 +25,12 @@ handlers:
         emits:
           - event_type: account.users.loaded
             payload:
-              account_id: data.account.id
-              name: data.account.name
-              users: data.account.users
+              account_id:
+                from: $.data.account.id
+              name:
+                from: $.data.account.name
+              users:
+                from: $.data.account.users
   - on: account.users.loaded
     effects:
       - type: record

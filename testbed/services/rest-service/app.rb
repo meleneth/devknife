@@ -31,7 +31,6 @@ class RestService < Sinatra::Base
   end
 
   post "/accounts" do
-    request.body.rewind
     body = JSON.parse(request.body.read)
     id = "acct_created_001"
 

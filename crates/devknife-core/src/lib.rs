@@ -5,10 +5,10 @@ pub mod loader;
 pub use domain::{
     Effect, Event, EventCause, GraphqlAssertionObservation, GraphqlEffect, GraphqlEventEmission,
     GraphqlExpectations, GraphqlOperationObservation, GraphqlResponseObservation, Handler,
-    Observation, ResponsePath, RestAssertionObservation, RestBody, RestEffect, RestEventEmission,
-    RestExpectations, RestMethod, RestOperationObservation, RestResponseObservation, RunReport,
-    RunStatus, RuntimeEnvironment, ServiceBinding, TraceEntry, TraceEntryKind, TraceFailure,
-    Workflow,
+    JsonPathSelector, Observation, RestAssertionObservation, RestBody, RestEffect,
+    RestEventEmission, RestExpectations, RestMethod, RestOperationObservation,
+    RestResponseObservation, RunReport, RunStatus, RuntimeEnvironment, ServiceBinding, TraceEntry,
+    TraceEntryKind, TraceFailure, Workflow,
 };
 pub use engine::{EngineError, ExecutionLimits, Runner};
 pub use loader::{

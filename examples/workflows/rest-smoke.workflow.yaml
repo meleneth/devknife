@@ -20,9 +20,12 @@ handlers:
         emits:
           - event_type: account.loaded
             payload:
-              account_id: body.id
-              name: body.name
-              correlation_id: body.correlation_id
+              account_id:
+                from: $.body.id
+              name:
+                from: $.body.name
+              correlation_id:
+                from: $.body.correlation_id
   - on: account.loaded
     effects:
       - type: record

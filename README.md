@@ -51,7 +51,7 @@ Any syntax examples in this repository are illustrative draft shapes, not final 
 
 ## Initial Implementation
 
-The repository now contains a first Rust workspace with `devknife-core` and `devknife-cli`. The implemented engine is intentionally small: it runs in-memory `emit`, `record`, and event-payload `assert` effects, plus narrow real REST and GraphQL effects that can call local HTTP JSON services, assert status, emit events from response paths such as `body.id` or `data.account.id`, and record the causal chain in the run trace.
+The repository now contains a first Rust workspace with `devknife-core` and `devknife-cli`. The implemented engine is intentionally small: it runs in-memory `emit`, `record`, and event-payload `assert` effects, plus narrow real REST and GraphQL effects that can call local HTTP JSON services, assert status, emit events from RFC 9535 JSONPath selectors such as `$.body.id` or `$.data.account.id`, and record the causal chain in the run trace.
 
 Useful commands:
 

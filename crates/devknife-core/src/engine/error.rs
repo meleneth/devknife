@@ -20,8 +20,14 @@ pub enum EngineError {
     RestRequestBuild { operation: String, message: String },
     #[error("failed to execute REST operation {operation}: {message}")]
     RestRequestFailed { operation: String, message: String },
-    #[error("failed to emit REST event {event_type}: response path '{path}' was not found")]
+    #[error("failed to emit REST event {event_type}: JSONPath '{path}' did not match")]
     RestEmissionPathMissing { event_type: String, path: String },
+    #[error("failed to emit REST event {event_type}: JSONPath '{path}' is invalid: {message}")]
+    RestEmissionPathInvalid {
+        event_type: String,
+        path: String,
+        message: String,
+    },
     #[error("missing GraphQL service binding for '{service}'")]
     MissingGraphqlServiceBinding { service: String },
     #[error("GraphQL effect requires service or base_url")]
@@ -34,6 +40,12 @@ pub enum EngineError {
     GraphqlRequestBuild { operation: String, message: String },
     #[error("failed to execute GraphQL operation {operation}: {message}")]
     GraphqlRequestFailed { operation: String, message: String },
-    #[error("failed to emit GraphQL event {event_type}: response path '{path}' was not found")]
+    #[error("failed to emit GraphQL event {event_type}: JSONPath '{path}' did not match")]
     GraphqlEmissionPathMissing { event_type: String, path: String },
+    #[error("failed to emit GraphQL event {event_type}: JSONPath '{path}' is invalid: {message}")]
+    GraphqlEmissionPathInvalid {
+        event_type: String,
+        path: String,
+        message: String,
+    },
 }

@@ -2,7 +2,7 @@ use serde::Deserialize;
 use serde_json::Value;
 use thiserror::Error;
 
-use crate::domain::{Effect, Event, Handler, RuntimeEnvironment, Workflow};
+use crate::domain::{Effect, Event, Handler, JsonPathSelector, RuntimeEnvironment, Workflow};
 
 #[derive(Debug, Error)]
 pub enum LoadError {
@@ -117,6 +117,7 @@ fn validate_effect(
                         "handlers[{handler_index}].effects[{effect_index}].emits[{emit_index}].event_type is required"
                     )));
                 }
+                validate_json_path_payload(&emit.payload, handler_index, effect_index, emit_index)?;
             }
             Ok(())
         }
@@ -149,11 +150,39 @@ fn validate_effect(
                         "handlers[{handler_index}].effects[{effect_index}].emits[{emit_index}].event_type is required"
                     )));
                 }
+                validate_json_path_payload(&emit.payload, handler_index, effect_index, emit_index)?;
             }
             Ok(())
         }
         Effect::Emit { .. } | Effect::Record { .. } | Effect::Assert(_) => Ok(()),
     }
+}
+
+fn validate_json_path_payload(
+    payload: &std::collections::BTreeMap<String, JsonPathSelector>,
+    handler_index: usize,
+    effect_index: usize,
+    emit_index: usize,
+) -> Result<(), LoadError> {
+    for (field, selector) in payload {
+        if field.trim().is_empty() {
+            return Err(LoadError::Validation(format!(
+                "handlers[{handler_index}].effects[{effect_index}].emits[{emit_index}].payload field name is required"
+            )));
+        }
+        if selector.from.trim().is_empty() {
+            return Err(LoadError::Validation(format!(
+                "handlers[{handler_index}].effects[{effect_index}].emits[{emit_index}].payload.{field}.from is required"
+            )));
+        }
+        jsonpath_rfc9535::JsonPath::parse(&selector.from).map_err(|error| {
+            LoadError::Validation(format!(
+                "handlers[{handler_index}].effects[{effect_index}].emits[{emit_index}].payload.{field}.from is not valid JSONPath: {error}"
+            ))
+        })?;
+    }
+
+    Ok(())
 }
 
 #[derive(Debug, Deserialize)]

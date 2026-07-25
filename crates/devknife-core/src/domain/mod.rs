@@ -6,8 +6,8 @@ mod trace;
 mod workflow;
 
 pub use effect::{
-    AssertEffect, Effect, GraphqlEffect, GraphqlEventEmission, GraphqlExpectations, ResponsePath,
-    RestEffect, RestEventEmission, RestExpectations, RestMethod,
+    AssertEffect, Effect, GraphqlEffect, GraphqlEventEmission, GraphqlExpectations,
+    JsonPathSelector, RestEffect, RestEventEmission, RestExpectations, RestMethod,
 };
 pub use environment::{RuntimeEnvironment, ServiceBinding};
 pub use event::{Event, EventCause};
