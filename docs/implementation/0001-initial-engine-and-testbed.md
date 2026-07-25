@@ -22,7 +22,7 @@ Status: Implemented
 
 - `examples/workflows/rest-graphql-sqs-websocket.future.workflow.yaml`
 - Environment binding in `examples/environments/local.yaml`
-- SQS and WebSocket effects in the engine
+- WebSocket effects in the engine
 - Secret handling and capabilities
 - Generated run trace files on disk
 
@@ -58,4 +58,4 @@ future REST, GraphQL, SQS, and WebSocket adapters have stable local targets.
 - Assertion paths support simple dot-separated payload keys only.
 - Run IDs are UUIDs; event and trace ordering is deterministic within a run.
 - The core is synchronous because current effects are in-memory only.
-- Protocol-specific effects are currently limited to narrow REST and GraphQL adapters.
+- Protocol-specific effects are currently limited to narrow REST, GraphQL, SNS, and SQS adapters.

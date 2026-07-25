@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+docker compose -f testbed/docker-compose.yml up -d goaws
+trap 'docker compose -f testbed/docker-compose.yml down' EXIT
+
+for _ in {1..30}; do
+  if curl --fail --silent --show-error 'http://localhost:18104/?Action=ListQueues&Version=2012-11-05' >/dev/null 2>&1; then
+    break
+  fi
+  sleep 1
+done
+
+curl --fail --silent --show-error 'http://localhost:18104/?Action=ListQueues&Version=2012-11-05' >/dev/null
+cargo run -p devknife-cli -- run examples/workflows/sns-sqs-smoke.workflow.yaml

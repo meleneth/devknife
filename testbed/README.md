@@ -1,6 +1,6 @@
 # devknife Local Testbed
 
-This testbed provides deterministic local protocol fixtures for adapter work. The Rust engine now calls the REST and GraphQL services; WebSocket and GoAWS remain future adapter fixtures.
+This testbed provides deterministic local protocol fixtures for adapter work. The Rust engine now calls the REST, GraphQL, and GoAWS services; WebSocket remains a future adapter fixture.
 
 ## Start
 
@@ -30,8 +30,8 @@ Deterministic local resources:
 
 - Account ID: `100010001000`
 - Region: `us-east-1`
-- Workflow input queue URL: `http://localhost:18104/queue/devknife-workflow-input`
-- Workflow results queue URL: `http://localhost:18104/queue/devknife-workflow-results`
+- Workflow input queue URL: `http://localhost:18104/100010001000/devknife-workflow-input`
+- Workflow results queue URL: `http://localhost:18104/100010001000/devknife-workflow-results`
 - Event topic ARN: `arn:aws:sns:us-east-1:100010001000:devknife-events`
 
 ## Smoke Test
@@ -62,8 +62,16 @@ cargo run -p devknife-cli -- run examples/workflows/graphql-smoke.workflow.yaml
 docker compose -f testbed/docker-compose.yml down
 ```
 
+SNS/SQS engine smoke:
+
+```sh
+docker compose -f testbed/docker-compose.yml up -d goaws
+cargo run -p devknife-cli -- run examples/workflows/sns-sqs-smoke.workflow.yaml
+docker compose -f testbed/docker-compose.yml down
+```
+
 ## Current Limits
 
-- WebSocket and GoAWS fixtures are not wired into `devknife-core` yet.
+- WebSocket fixture is not wired into `devknife-core` yet.
 - GoAWS configuration may need minor adjustment if the upstream image changes its config schema.
 - WebSocket fixture is intentionally simple: JSON `ping` returns `pong`, JSON `subscribe` returns `subscription.confirmed`, and other JSON messages are echoed.

@@ -224,8 +224,63 @@ fn trace_line(kind: &TraceEntryKind) -> Option<String> {
                 operation.url,
                 message
             )),
+            Observation::SnsPublish {
+                operation,
+                message_id,
+                emitted_events,
+            } => Some(format!(
+                "effect {} {} -> {}{}",
+                effect.name(),
+                operation.url,
+                message_id,
+                emitted_suffix(emitted_events)
+            )),
+            Observation::SqsSend {
+                operation,
+                message_id,
+                emitted_events,
+            } => Some(format!(
+                "effect {} {} -> {}{}",
+                effect.name(),
+                operation.url,
+                message_id,
+                emitted_suffix(emitted_events)
+            )),
+            Observation::SqsReceive {
+                operation,
+                messages,
+                deleted_receipt_handles,
+                emitted_events,
+            } => Some(format!(
+                "effect {} {} -> {} message(s), {} deleted{}",
+                effect.name(),
+                operation.url,
+                messages.len(),
+                deleted_receipt_handles.len(),
+                emitted_suffix(emitted_events)
+            )),
+            Observation::AwsFailed { operation, message } => Some(format!(
+                "effect {} {} {} failed: {}",
+                effect.name(),
+                operation.action,
+                operation.url,
+                message
+            )),
         },
         TraceEntryKind::HandlerSkipped { on, .. } => Some(format!("no handler for {on}")),
         TraceEntryKind::RunStarted { .. } | TraceEntryKind::RunEnded { .. } => None,
+    }
+}
+
+fn emitted_suffix(events: &[devknife_core::Event]) -> String {
+    let emitted = events
+        .iter()
+        .map(|event| event.event_type.as_str())
+        .collect::<Vec<_>>()
+        .join(", ");
+    if emitted.is_empty() {
+        String::new()
+    } else {
+        format!(" emitted {emitted}")
     }
 }

@@ -1,14 +1,12 @@
 Local:
   Host: 0.0.0.0
   Port: 4100
-  AccountId: "100010001000"
+  AccountID: "100010001000"
   Region: us-east-1
-
-Queue:
-  - Name: devknife-workflow-input
-  - Name: devknife-workflow-results
-
-Topic:
-  - Name: devknife-events
-    Subscriptions:
-      - QueueName: devknife-workflow-input
+  Queues:
+    - Name: devknife-workflow-input
+    - Name: devknife-workflow-results
+  Topics:
+    - Name: devknife-events
+      Subscriptions:
+        - QueueName: devknife-workflow-input

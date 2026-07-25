@@ -70,12 +70,13 @@ Current limits:
 - no schema import, validation, persisted operations, fragments tooling, auth helpers, or retries
 - no configurable partial-success policy yet
 
-## SQS
+## SNS/SQS
 
-Implementation status: future adapter, not executable yet.
+Implementation status: narrow real adapter against GoAWS.
 
-Modeled as asynchronous queue semantics:
+Modeled as asynchronous topic and queue semantics:
 
+- publish
 - send
 - poll/receive
 - match predicates
@@ -84,6 +85,23 @@ Modeled as asynchronous queue semantics:
 - delete policy
 
 V1 scope is intentionally narrower than full SQS semantics.
+
+Current implementation supports:
+
+- named service binding to a local GoAWS endpoint through environment YAML
+- `sns_publish` to a topic ARN
+- `sqs_send` to a queue URL
+- `sqs_receive` from a queue URL with `max_messages`, `wait_time_seconds`, and `delete_on_success`
+- typed observations for publish/send/receive and received message metadata
+- parsing JSON SQS bodies and GoAWS SNS notification envelopes
+- convenience extraction from `$.message.body_message_json.*` when an SNS notification `Message` field contains JSON
+- event emission from RFC 9535 JSONPath selectors over AWS operation/result documents
+
+Current limits:
+
+- GoAWS/local HTTP only; no AWS SigV4 or real AWS credentials yet
+- no visibility timeout mutation, batch send/delete, FIFO-specific options, message attributes, or DLQ behavior
+- receive polling is one query request, not a retry loop across multiple waits
 
 ## WebSockets
 

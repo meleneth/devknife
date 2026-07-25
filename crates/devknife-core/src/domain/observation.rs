@@ -43,6 +43,26 @@ pub enum Observation {
         message: String,
         status: Option<u16>,
     },
+    SnsPublish {
+        operation: AwsOperationObservation,
+        message_id: String,
+        emitted_events: Vec<Event>,
+    },
+    SqsSend {
+        operation: AwsOperationObservation,
+        message_id: String,
+        emitted_events: Vec<Event>,
+    },
+    SqsReceive {
+        operation: AwsOperationObservation,
+        messages: Vec<SqsMessageObservation>,
+        deleted_receipt_handles: Vec<String>,
+        emitted_events: Vec<Event>,
+    },
+    AwsFailed {
+        operation: AwsOperationObservation,
+        message: String,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -100,4 +120,21 @@ pub enum GraphqlAssertionObservation {
     StatusFailed { expected: u16, actual: u16 },
     NoErrorsPassed,
     NoErrorsFailed { errors: Vec<Value> },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AwsOperationObservation {
+    pub service: Option<String>,
+    pub action: String,
+    pub url: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct SqsMessageObservation {
+    pub message_id: String,
+    pub receipt_handle: String,
+    pub body: Value,
+    pub body_message_json: Option<Value>,
+    #[serde(default)]
+    pub attributes: BTreeMap<String, String>,
 }

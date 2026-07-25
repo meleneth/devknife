@@ -690,6 +690,193 @@ handlers:
     }));
 }
 
+#[test]
+fn sns_publish_emits_message_id() {
+    let server = AwsTestServer::start(1, |request_index, request| {
+        assert_eq!(request_index, 0);
+        assert!(request.starts_with("POST / HTTP/1.1"));
+        assert!(request.contains("Action=Publish"));
+        assert!(request
+            .contains("TopicArn=arn%3Aaws%3Asns%3Aus-east-1%3A100010001000%3Adevknife-events"));
+        assert!(request.contains("Message=%7B%22correlation_id%22%3A%22corr-001%22%7D"));
+        http_response(
+            200,
+            r#"<PublishResponse><PublishResult><MessageId>sns-message-001</MessageId></PublishResult></PublishResponse>"#,
+        )
+    });
+    let workflow = devknife_core::load_workflow_yaml(
+        r#"
+name: sns-publish
+seed_events:
+  - id: seed-publish
+    type: workflow.event.ready
+    payload:
+      correlation_id: corr-001
+handlers:
+  - on: workflow.event.ready
+    effects:
+      - type: sns_publish
+        service: aws
+        topic_arn: arn:aws:sns:us-east-1:100010001000:devknife-events
+        message:
+          correlation_id: "{{ event.payload.correlation_id }}"
+        emits:
+          - event_type: sns.published
+            payload:
+              message_id:
+                from: $.message_id
+"#,
+    )
+    .expect("workflow parses");
+
+    let report = runner_with_aws(server.base_url()).run(workflow);
+
+    assert_eq!(report.status, RunStatus::Succeeded);
+    let emitted = report
+        .trace
+        .iter()
+        .find_map(|entry| match &entry.kind {
+            TraceEntryKind::EffectExecuted {
+                observation: Observation::SnsPublish { emitted_events, .. },
+                ..
+            } => emitted_events.first(),
+            _ => None,
+        })
+        .expect("SNS emitted event");
+    assert_eq!(emitted.event_type, "sns.published");
+    assert_eq!(emitted.payload["message_id"], json!("sns-message-001"));
+}
+
+#[test]
+fn sqs_send_posts_message_and_emits_message_id() {
+    let server = AwsTestServer::start(1, |request_index, request| {
+        assert_eq!(request_index, 0);
+        assert!(request.starts_with("POST /100010001000/devknife-workflow-results HTTP/1.1"));
+        assert!(request.contains("Action=SendMessage"));
+        assert!(request.contains("MessageBody=%7B%22result%22%3A%22ok%22%7D"));
+        http_response(
+            200,
+            r#"<SendMessageResponse><SendMessageResult><MessageId>sqs-message-001</MessageId></SendMessageResult></SendMessageResponse>"#,
+        )
+    });
+    let workflow = devknife_core::load_workflow_yaml(
+        r#"
+name: sqs-send
+seed_events:
+  - id: seed-send
+    type: workflow.result.ready
+handlers:
+  - on: workflow.result.ready
+    effects:
+      - type: sqs_send
+        service: aws
+        queue_url: http://localhost:18104/100010001000/devknife-workflow-results
+        message:
+          result: ok
+        emits:
+          - event_type: sqs.sent
+            payload:
+              message_id:
+                from: $.message_id
+"#,
+    )
+    .expect("workflow parses");
+
+    let report = runner_with_aws(server.base_url()).run(workflow);
+
+    assert_eq!(report.status, RunStatus::Succeeded);
+    let emitted = report
+        .trace
+        .iter()
+        .find_map(|entry| match &entry.kind {
+            TraceEntryKind::EffectExecuted {
+                observation: Observation::SqsSend { emitted_events, .. },
+                ..
+            } => emitted_events.first(),
+            _ => None,
+        })
+        .expect("SQS send emitted event");
+    assert_eq!(emitted.event_type, "sqs.sent");
+    assert_eq!(emitted.payload["message_id"], json!("sqs-message-001"));
+}
+
+#[test]
+fn sqs_receive_emits_from_sns_message_json_and_deletes() {
+    let server = AwsTestServer::start(2, |request_index, request| match request_index {
+        0 => {
+            assert!(request.starts_with("POST /100010001000/devknife-workflow-input HTTP/1.1"));
+            assert!(request.contains("Action=ReceiveMessage"));
+            http_response(
+                200,
+                r#"<ReceiveMessageResponse><ReceiveMessageResult><Message><MessageId>sqs-message-001</MessageId><ReceiptHandle>receipt-001</ReceiptHandle><Body>{&quot;Type&quot;:&quot;Notification&quot;,&quot;Message&quot;:&quot;{\&quot;correlation_id\&quot;:\&quot;corr-001\&quot;,\&quot;status\&quot;:\&quot;ok\&quot;}&quot;}</Body><Attribute><Name>ApproximateReceiveCount</Name><Value>1</Value></Attribute></Message></ReceiveMessageResult></ReceiveMessageResponse>"#,
+            )
+        }
+        1 => {
+            assert!(request.starts_with("POST /100010001000/devknife-workflow-input HTTP/1.1"));
+            assert!(request.contains("Action=DeleteMessage"));
+            assert!(request.contains("ReceiptHandle=receipt-001"));
+            http_response(
+                200,
+                r#"<DeleteMessageResponse><ResponseMetadata><RequestId>delete-001</RequestId></ResponseMetadata></DeleteMessageResponse>"#,
+            )
+        }
+        _ => unreachable!("unexpected request"),
+    });
+    let workflow = devknife_core::load_workflow_yaml(
+        r#"
+name: sqs-receive
+seed_events:
+  - id: seed-receive
+    type: workflow.result.awaited
+handlers:
+  - on: workflow.result.awaited
+    effects:
+      - type: sqs_receive
+        service: aws
+        queue_url: http://localhost:18104/100010001000/devknife-workflow-input
+        wait_time_seconds: 1
+        delete_on_success: true
+        emits:
+          - event_type: workflow.result.received
+            payload:
+              correlation_id:
+                from: $.message.body_message_json.correlation_id
+              status:
+                from: $.message.body_message_json.status
+              receive_count:
+                from: $.message.attributes.ApproximateReceiveCount
+"#,
+    )
+    .expect("workflow parses");
+
+    let report = runner_with_aws(server.base_url()).run(workflow);
+
+    assert_eq!(report.status, RunStatus::Succeeded);
+    let emitted = report
+        .trace
+        .iter()
+        .find_map(|entry| match &entry.kind {
+            TraceEntryKind::EffectExecuted {
+                observation:
+                    Observation::SqsReceive {
+                        deleted_receipt_handles,
+                        emitted_events,
+                        ..
+                    },
+                ..
+            } => {
+                assert_eq!(deleted_receipt_handles, &vec!["receipt-001".to_string()]);
+                emitted_events.first()
+            }
+            _ => None,
+        })
+        .expect("SQS receive emitted event");
+    assert_eq!(emitted.event_type, "workflow.result.received");
+    assert_eq!(emitted.payload["correlation_id"], json!("corr-001"));
+    assert_eq!(emitted.payload["status"], json!("ok"));
+    assert_eq!(emitted.payload["receive_count"], json!("1"));
+}
+
 fn runner_with_rest(base_url: String) -> Runner {
     let mut services = BTreeMap::new();
     services.insert("rest".to_string(), ServiceBinding { base_url });
@@ -705,6 +892,18 @@ fn runner_with_rest(base_url: String) -> Runner {
 fn runner_with_graphql(base_url: String) -> Runner {
     let mut services = BTreeMap::new();
     services.insert("graphql".to_string(), ServiceBinding { base_url });
+    Runner::with_environment(
+        ExecutionLimits::default(),
+        RuntimeEnvironment {
+            services,
+            ..RuntimeEnvironment::default()
+        },
+    )
+}
+
+fn runner_with_aws(base_url: String) -> Runner {
+    let mut services = BTreeMap::new();
+    services.insert("aws".to_string(), ServiceBinding { base_url });
     Runner::with_environment(
         ExecutionLimits::default(),
         RuntimeEnvironment {
@@ -744,6 +943,40 @@ impl RestTestServer {
 
     fn base_url_with_path(&self, path: &str) -> String {
         format!("{}{path}", self.base_url)
+    }
+}
+
+struct AwsTestServer {
+    base_url: String,
+}
+
+impl AwsTestServer {
+    fn start(
+        request_count: usize,
+        mut handler: impl FnMut(usize, String) -> String + Send + 'static,
+    ) -> Self {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind test server");
+        let port = listener.local_addr().expect("server address").port();
+        thread::spawn(move || {
+            for request_index in 0..request_count {
+                let (mut stream, _) = listener.accept().expect("accept request");
+                let mut buffer = [0; 4096];
+                let size = stream.read(&mut buffer).expect("read request");
+                let request = String::from_utf8_lossy(&buffer[..size]).to_string();
+                let response = handler(request_index, request);
+                stream
+                    .write_all(response.as_bytes())
+                    .expect("write response");
+            }
+        });
+
+        Self {
+            base_url: format!("http://127.0.0.1:{port}"),
+        }
+    }
+
+    fn base_url(&self) -> String {
+        self.base_url.clone()
     }
 }
 

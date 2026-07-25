@@ -154,8 +154,96 @@ fn validate_effect(
             }
             Ok(())
         }
+        Effect::SnsPublish(sns) => {
+            validate_aws_binding(
+                sns.service.as_deref(),
+                sns.endpoint_url.as_deref(),
+                handler_index,
+                effect_index,
+            )?;
+            if sns.topic_arn.trim().is_empty() {
+                return Err(LoadError::Validation(format!(
+                    "handlers[{handler_index}].effects[{effect_index}].topic_arn is required"
+                )));
+            }
+            for (emit_index, emit) in sns.emits.iter().enumerate() {
+                if emit.event_type.trim().is_empty() {
+                    return Err(LoadError::Validation(format!(
+                        "handlers[{handler_index}].effects[{effect_index}].emits[{emit_index}].event_type is required"
+                    )));
+                }
+                validate_json_path_payload(&emit.payload, handler_index, effect_index, emit_index)?;
+            }
+            Ok(())
+        }
+        Effect::SqsSend(sqs) => {
+            validate_aws_binding(
+                sqs.service.as_deref(),
+                sqs.endpoint_url.as_deref(),
+                handler_index,
+                effect_index,
+            )?;
+            if sqs.queue_url.trim().is_empty() {
+                return Err(LoadError::Validation(format!(
+                    "handlers[{handler_index}].effects[{effect_index}].queue_url is required"
+                )));
+            }
+            for (emit_index, emit) in sqs.emits.iter().enumerate() {
+                if emit.event_type.trim().is_empty() {
+                    return Err(LoadError::Validation(format!(
+                        "handlers[{handler_index}].effects[{effect_index}].emits[{emit_index}].event_type is required"
+                    )));
+                }
+                validate_json_path_payload(&emit.payload, handler_index, effect_index, emit_index)?;
+            }
+            Ok(())
+        }
+        Effect::SqsReceive(sqs) => {
+            validate_aws_binding(
+                sqs.service.as_deref(),
+                sqs.endpoint_url.as_deref(),
+                handler_index,
+                effect_index,
+            )?;
+            if sqs.queue_url.trim().is_empty() {
+                return Err(LoadError::Validation(format!(
+                    "handlers[{handler_index}].effects[{effect_index}].queue_url is required"
+                )));
+            }
+            if sqs.max_messages == 0 || sqs.max_messages > 10 {
+                return Err(LoadError::Validation(format!(
+                    "handlers[{handler_index}].effects[{effect_index}].max_messages must be between 1 and 10"
+                )));
+            }
+            for (emit_index, emit) in sqs.emits.iter().enumerate() {
+                if emit.event_type.trim().is_empty() {
+                    return Err(LoadError::Validation(format!(
+                        "handlers[{handler_index}].effects[{effect_index}].emits[{emit_index}].event_type is required"
+                    )));
+                }
+                validate_json_path_payload(&emit.payload, handler_index, effect_index, emit_index)?;
+            }
+            Ok(())
+        }
         Effect::Emit { .. } | Effect::Record { .. } | Effect::Assert(_) => Ok(()),
     }
+}
+
+fn validate_aws_binding(
+    service: Option<&str>,
+    endpoint_url: Option<&str>,
+    handler_index: usize,
+    effect_index: usize,
+) -> Result<(), LoadError> {
+    if service.unwrap_or_default().trim().is_empty()
+        && endpoint_url.unwrap_or_default().trim().is_empty()
+    {
+        return Err(LoadError::Validation(format!(
+            "handlers[{handler_index}].effects[{effect_index}] requires service or endpoint_url"
+        )));
+    }
+
+    Ok(())
 }
 
 fn validate_json_path_payload(

@@ -1,0 +1,60 @@
+name: sns-sqs-smoke
+seed_events:
+  - id: seed-publish-event
+    type: workflow.event.ready
+    payload:
+      correlation_id: sns-sqs-smoke-001
+      status: ok
+handlers:
+  - on: workflow.event.ready
+    effects:
+      - type: sns_publish
+        service: aws
+        topic_arn: "{{ env.workflow_events_topic_arn }}"
+        message:
+          correlation_id: "{{ event.payload.correlation_id }}"
+          status: "{{ event.payload.status }}"
+        emits:
+          - event_type: workflow.event.published
+            payload:
+              message_id:
+                from: $.message_id
+  - on: workflow.event.published
+    effects:
+      - type: sqs_receive
+        service: aws
+        queue_url: "{{ env.workflow_input_queue_url }}"
+        wait_time_seconds: 1
+        delete_on_success: true
+        emits:
+          - event_type: workflow.result.received
+            payload:
+              correlation_id:
+                from: $.message.body_message_json.correlation_id
+              status:
+                from: $.message.body_message_json.status
+              sns_message_id:
+                from: $.message.body.MessageId
+              sqs_message_id:
+                from: $.message.message_id
+  - on: workflow.result.received
+    effects:
+      - type: assert
+        path: status
+        equals: ok
+      - type: sqs_send
+        service: aws
+        queue_url: "{{ env.workflow_results_queue_url }}"
+        message:
+          correlation_id: "{{ event.payload.correlation_id }}"
+          status: "{{ event.payload.status }}"
+          source: devknife
+        emits:
+          - event_type: workflow.result.sent
+            payload:
+              message_id:
+                from: $.message_id
+  - on: workflow.result.sent
+    effects:
+      - type: record
+        message: workflow result sent through GoAWS SQS fixture

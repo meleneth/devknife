@@ -5,14 +5,16 @@ use std::{
     time::Duration,
 };
 
+use quick_xml::{events::Event as XmlEvent, Reader};
 use serde_json::Value;
 use uuid::Uuid;
 
 use crate::domain::{
-    AssertEffect, Effect, Event, EventCause, GraphqlAssertionObservation, GraphqlEffect,
-    GraphqlOperationObservation, GraphqlResponseObservation, JsonPathSelector, Observation,
-    RestAssertionObservation, RestBody, RestEffect, RestOperationObservation,
-    RestResponseObservation, RunReport, RunStatus, RuntimeEnvironment, TraceEntry, TraceEntryKind,
+    AssertEffect, AwsOperationObservation, Effect, Event, EventCause, GraphqlAssertionObservation,
+    GraphqlEffect, GraphqlOperationObservation, GraphqlResponseObservation, JsonPathSelector,
+    Observation, RestAssertionObservation, RestBody, RestEffect, RestOperationObservation,
+    RestResponseObservation, RunReport, RunStatus, RuntimeEnvironment, SnsPublishEffect,
+    SqsMessageObservation, SqsReceiveEffect, SqsSendEffect, TraceEntry, TraceEntryKind,
     TraceFailure, Workflow,
 };
 
@@ -146,6 +148,9 @@ impl Runner {
                         Observation::GraphqlResponse { emitted_events, .. } => {
                             emitted_events.clone()
                         }
+                        Observation::SnsPublish { emitted_events, .. }
+                        | Observation::SqsSend { emitted_events, .. }
+                        | Observation::SqsReceive { emitted_events, .. } => emitted_events.clone(),
                         _ => Vec::new(),
                     };
 
@@ -228,6 +233,15 @@ impl Runner {
             }
             Effect::Graphql(graphql) => {
                 self.execute_graphql_effect(graphql, event, trace_entry_id, created_events)
+            }
+            Effect::SnsPublish(sns) => {
+                self.execute_sns_publish_effect(sns, event, trace_entry_id, created_events)
+            }
+            Effect::SqsSend(sqs) => {
+                self.execute_sqs_send_effect(sqs, event, trace_entry_id, created_events)
+            }
+            Effect::SqsReceive(sqs) => {
+                self.execute_sqs_receive_effect(sqs, event, trace_entry_id, created_events)
             }
         }
     }
@@ -464,6 +478,316 @@ impl Runner {
         Ok(emitted_events)
     }
 
+    fn execute_sns_publish_effect(
+        &self,
+        sns: &SnsPublishEffect,
+        event: &Event,
+        trace_entry_id: &str,
+        created_events: &mut usize,
+    ) -> Result<Observation, EngineError> {
+        let operation = AwsOperationObservation {
+            service: sns.service.clone(),
+            action: "Publish".to_string(),
+            url: fallback_aws_endpoint_url(
+                sns.service.as_deref(),
+                sns.endpoint_url.as_deref(),
+                &self.environment,
+            ),
+        };
+        let request = match build_sns_publish_request(sns, event, &self.environment) {
+            Ok(request) => request,
+            Err(error) => {
+                return Ok(Observation::AwsFailed {
+                    operation,
+                    message: error.to_string(),
+                });
+            }
+        };
+        let response = match execute_http_request(&request) {
+            Ok(response) => response,
+            Err(error) => {
+                return Ok(Observation::AwsFailed {
+                    operation: aws_operation_observation(
+                        sns.service.clone(),
+                        "Publish",
+                        &request.url,
+                    ),
+                    message: error.to_string(),
+                });
+            }
+        };
+        let message_id = match parse_single_xml_text(&request.operation, &response, "MessageId") {
+            Ok(message_id) => message_id,
+            Err(error) => {
+                return Ok(Observation::AwsFailed {
+                    operation: aws_operation_observation(
+                        sns.service.clone(),
+                        "Publish",
+                        &request.url,
+                    ),
+                    message: error.to_string(),
+                });
+            }
+        };
+        let document = serde_json::json!({
+            "message_id": message_id,
+            "topic_arn": sns.topic_arn,
+        });
+        let emitted_events = self.build_aws_emitted_events(
+            sns.emits
+                .iter()
+                .map(|emit| (&emit.event_type, &emit.payload)),
+            event,
+            trace_entry_id,
+            created_events,
+            &document,
+        )?;
+
+        Ok(Observation::SnsPublish {
+            operation: aws_operation_observation(sns.service.clone(), "Publish", &request.url),
+            message_id,
+            emitted_events,
+        })
+    }
+
+    fn execute_sqs_send_effect(
+        &self,
+        sqs: &SqsSendEffect,
+        event: &Event,
+        trace_entry_id: &str,
+        created_events: &mut usize,
+    ) -> Result<Observation, EngineError> {
+        let operation = AwsOperationObservation {
+            service: sqs.service.clone(),
+            action: "SendMessage".to_string(),
+            url: fallback_aws_endpoint_url(
+                sqs.service.as_deref(),
+                sqs.endpoint_url.as_deref(),
+                &self.environment,
+            ),
+        };
+        let request = match build_sqs_send_request(sqs, event, &self.environment) {
+            Ok(request) => request,
+            Err(error) => {
+                return Ok(Observation::AwsFailed {
+                    operation,
+                    message: error.to_string(),
+                });
+            }
+        };
+        let response = match execute_http_request(&request) {
+            Ok(response) => response,
+            Err(error) => {
+                return Ok(Observation::AwsFailed {
+                    operation: aws_operation_observation(
+                        sqs.service.clone(),
+                        "SendMessage",
+                        &request.url,
+                    ),
+                    message: error.to_string(),
+                });
+            }
+        };
+        let message_id = match parse_single_xml_text(&request.operation, &response, "MessageId") {
+            Ok(message_id) => message_id,
+            Err(error) => {
+                return Ok(Observation::AwsFailed {
+                    operation: aws_operation_observation(
+                        sqs.service.clone(),
+                        "SendMessage",
+                        &request.url,
+                    ),
+                    message: error.to_string(),
+                });
+            }
+        };
+        let document = serde_json::json!({
+            "message_id": message_id,
+            "queue_url": sqs.queue_url,
+        });
+        let emitted_events = self.build_aws_emitted_events(
+            sqs.emits
+                .iter()
+                .map(|emit| (&emit.event_type, &emit.payload)),
+            event,
+            trace_entry_id,
+            created_events,
+            &document,
+        )?;
+
+        Ok(Observation::SqsSend {
+            operation: aws_operation_observation(sqs.service.clone(), "SendMessage", &request.url),
+            message_id,
+            emitted_events,
+        })
+    }
+
+    fn execute_sqs_receive_effect(
+        &self,
+        sqs: &SqsReceiveEffect,
+        event: &Event,
+        trace_entry_id: &str,
+        created_events: &mut usize,
+    ) -> Result<Observation, EngineError> {
+        let operation = AwsOperationObservation {
+            service: sqs.service.clone(),
+            action: "ReceiveMessage".to_string(),
+            url: fallback_aws_endpoint_url(
+                sqs.service.as_deref(),
+                sqs.endpoint_url.as_deref(),
+                &self.environment,
+            ),
+        };
+        let request = match build_sqs_receive_request(sqs, event, &self.environment) {
+            Ok(request) => request,
+            Err(error) => {
+                return Ok(Observation::AwsFailed {
+                    operation,
+                    message: error.to_string(),
+                });
+            }
+        };
+        let response = match execute_http_request(&request) {
+            Ok(response) => response,
+            Err(error) => {
+                return Ok(Observation::AwsFailed {
+                    operation: aws_operation_observation(
+                        sqs.service.clone(),
+                        "ReceiveMessage",
+                        &request.url,
+                    ),
+                    message: error.to_string(),
+                });
+            }
+        };
+        let messages = match parse_sqs_receive_messages(&request.operation, &response) {
+            Ok(messages) => messages,
+            Err(error) => {
+                return Ok(Observation::AwsFailed {
+                    operation: aws_operation_observation(
+                        sqs.service.clone(),
+                        "ReceiveMessage",
+                        &request.url,
+                    ),
+                    message: error.to_string(),
+                });
+            }
+        };
+        let mut deleted_receipt_handles = Vec::new();
+        if sqs.delete_on_success {
+            for message in &messages {
+                let delete_request = match build_sqs_delete_request(
+                    sqs,
+                    event,
+                    &self.environment,
+                    &message.receipt_handle,
+                ) {
+                    Ok(request) => request,
+                    Err(error) => {
+                        return Ok(Observation::AwsFailed {
+                            operation: aws_operation_observation(
+                                sqs.service.clone(),
+                                "DeleteMessage",
+                                &request.url,
+                            ),
+                            message: error.to_string(),
+                        });
+                    }
+                };
+                if let Err(error) = execute_http_request(&delete_request) {
+                    return Ok(Observation::AwsFailed {
+                        operation: aws_operation_observation(
+                            sqs.service.clone(),
+                            "DeleteMessage",
+                            &delete_request.url,
+                        ),
+                        message: error.to_string(),
+                    });
+                }
+                deleted_receipt_handles.push(message.receipt_handle.clone());
+            }
+        }
+
+        let document = sqs_receive_extraction_document(&messages);
+        let emitted_events = self.build_aws_emitted_events(
+            sqs.emits
+                .iter()
+                .map(|emit| (&emit.event_type, &emit.payload)),
+            event,
+            trace_entry_id,
+            created_events,
+            &document,
+        )?;
+
+        Ok(Observation::SqsReceive {
+            operation: aws_operation_observation(
+                sqs.service.clone(),
+                "ReceiveMessage",
+                &request.url,
+            ),
+            messages,
+            deleted_receipt_handles,
+            emitted_events,
+        })
+    }
+
+    fn build_aws_emitted_events<'a>(
+        &self,
+        emissions: impl Iterator<Item = (&'a String, &'a BTreeMap<String, JsonPathSelector>)>,
+        event: &Event,
+        trace_entry_id: &str,
+        created_events: &mut usize,
+        document: &Value,
+    ) -> Result<Vec<Event>, EngineError> {
+        let mut emitted_events = Vec::new();
+
+        for (event_type, mapping) in emissions {
+            if *created_events >= self.limits.max_events {
+                return Err(EngineError::MaxEventCountExceeded {
+                    limit: self.limits.max_events,
+                });
+            }
+
+            let next_depth = event.depth + 1;
+            if next_depth > self.limits.max_depth {
+                return Err(EngineError::MaxDepthExceeded {
+                    limit: self.limits.max_depth,
+                });
+            }
+
+            let mut payload = serde_json::Map::new();
+            for (field, path) in mapping {
+                let value = select_json_path_value(document, path).map_err(|error| {
+                    EngineError::AwsEmissionPathInvalid {
+                        event_type: event_type.clone(),
+                        path: path.from.clone(),
+                        message: error,
+                    }
+                })?;
+                let value = value.ok_or_else(|| EngineError::AwsEmissionPathMissing {
+                    event_type: event_type.clone(),
+                    path: path.from.clone(),
+                })?;
+                payload.insert(field.clone(), value);
+            }
+
+            *created_events += 1;
+            emitted_events.push(Event {
+                id: format!("event-{}", created_events),
+                event_type: event_type.clone(),
+                payload: Value::Object(payload),
+                caused_by: Some(EventCause {
+                    event_id: event.id.clone(),
+                    trace_entry_id: trace_entry_id.to_string(),
+                }),
+                sequence: *created_events as u64,
+                depth: next_depth,
+            });
+        }
+
+        Ok(emitted_events)
+    }
+
     fn check_step_limit(&self, processed_steps: usize) -> Result<(), EngineError> {
         if processed_steps >= self.limits.max_steps {
             Err(EngineError::MaxStepCountExceeded {
@@ -511,6 +835,7 @@ fn observation_failed(observation: &Observation) -> bool {
             )
         }),
         Observation::GraphqlFailed { .. } => true,
+        Observation::AwsFailed { .. } => true,
         _ => false,
     }
 }
@@ -608,6 +933,10 @@ fn observation_failure_message(observation: &Observation) -> String {
                 .map(|status| format!(" returned status {status}"))
                 .unwrap_or_default(),
             message
+        ),
+        Observation::AwsFailed { operation, message } => format!(
+            "AWS effect failed during workflow run: {} {}: {}",
+            operation.action, operation.url, message
         ),
         _ => "workflow run failed".to_string(),
     }
@@ -734,6 +1063,7 @@ struct BuiltRestRequest {
     path_and_query: String,
     headers: BTreeMap<String, String>,
     body: Option<String>,
+    content_type: Option<String>,
     url: String,
 }
 
@@ -806,6 +1136,10 @@ fn build_rest_request(
         path_and_query,
         headers,
         body,
+        content_type: rest
+            .json_body
+            .as_ref()
+            .map(|_| "application/json".to_string()),
         url,
     })
 }
@@ -896,6 +1230,7 @@ fn build_graphql_request(
         path_and_query: base.path,
         headers: BTreeMap::new(),
         body: Some(serde_json::to_string(&Value::Object(body)).expect("JSON values serialize")),
+        content_type: Some("application/json".to_string()),
         url: base.url,
     })
 }
@@ -936,6 +1271,268 @@ fn graphql_build_error(operation: &str, error: EngineError) -> EngineError {
         operation: operation.to_string(),
         message: error.to_string(),
     }
+}
+
+fn build_sns_publish_request(
+    sns: &SnsPublishEffect,
+    event: &Event,
+    environment: &RuntimeEnvironment,
+) -> Result<BuiltRestRequest, EngineError> {
+    let action = "Publish";
+    let endpoint = build_aws_endpoint_url(
+        sns.service.as_deref(),
+        sns.endpoint_url.as_deref(),
+        event,
+        environment,
+        action,
+    )?;
+    let topic_arn = interpolate_string(&sns.topic_arn, event, environment, action)
+        .map_err(|error| aws_build_error(action, error))?;
+    let message = interpolate_json(&sns.message, event, environment, action)
+        .map_err(|error| aws_build_error(action, error))?;
+    let message = serde_json::to_string(&message).expect("JSON values serialize");
+    let params = vec![
+        ("Action".to_string(), action.to_string()),
+        ("Version".to_string(), "2010-03-31".to_string()),
+        ("TopicArn".to_string(), topic_arn),
+        ("Message".to_string(), message),
+    ];
+
+    build_aws_query_request(action, endpoint, "/", params)
+}
+
+fn build_sqs_send_request(
+    sqs: &SqsSendEffect,
+    event: &Event,
+    environment: &RuntimeEnvironment,
+) -> Result<BuiltRestRequest, EngineError> {
+    let action = "SendMessage";
+    let endpoint = build_aws_endpoint_url(
+        sqs.service.as_deref(),
+        sqs.endpoint_url.as_deref(),
+        event,
+        environment,
+        action,
+    )?;
+    let queue_path = aws_queue_path(&sqs.queue_url, event, environment, action)?;
+    let message = interpolate_json(&sqs.message, event, environment, action)
+        .map_err(|error| aws_build_error(action, error))?;
+    let message = serde_json::to_string(&message).expect("JSON values serialize");
+    let params = vec![
+        ("Action".to_string(), action.to_string()),
+        ("Version".to_string(), "2012-11-05".to_string()),
+        ("MessageBody".to_string(), message),
+    ];
+
+    build_aws_query_request(action, endpoint, &queue_path, params)
+}
+
+fn build_sqs_receive_request(
+    sqs: &SqsReceiveEffect,
+    event: &Event,
+    environment: &RuntimeEnvironment,
+) -> Result<BuiltRestRequest, EngineError> {
+    let action = "ReceiveMessage";
+    let endpoint = build_aws_endpoint_url(
+        sqs.service.as_deref(),
+        sqs.endpoint_url.as_deref(),
+        event,
+        environment,
+        action,
+    )?;
+    let queue_path = aws_queue_path(&sqs.queue_url, event, environment, action)?;
+    let params = vec![
+        ("Action".to_string(), action.to_string()),
+        ("Version".to_string(), "2012-11-05".to_string()),
+        (
+            "MaxNumberOfMessages".to_string(),
+            sqs.max_messages.to_string(),
+        ),
+        (
+            "WaitTimeSeconds".to_string(),
+            sqs.wait_time_seconds.to_string(),
+        ),
+    ];
+
+    build_aws_query_request(action, endpoint, &queue_path, params)
+}
+
+fn build_sqs_delete_request(
+    sqs: &SqsReceiveEffect,
+    event: &Event,
+    environment: &RuntimeEnvironment,
+    receipt_handle: &str,
+) -> Result<BuiltRestRequest, EngineError> {
+    let action = "DeleteMessage";
+    let endpoint = build_aws_endpoint_url(
+        sqs.service.as_deref(),
+        sqs.endpoint_url.as_deref(),
+        event,
+        environment,
+        action,
+    )?;
+    let queue_path = aws_queue_path(&sqs.queue_url, event, environment, action)?;
+    let params = vec![
+        ("Action".to_string(), action.to_string()),
+        ("Version".to_string(), "2012-11-05".to_string()),
+        ("ReceiptHandle".to_string(), receipt_handle.to_string()),
+    ];
+
+    build_aws_query_request(action, endpoint, &queue_path, params)
+}
+
+fn build_aws_query_request(
+    action: &str,
+    endpoint: AwsEndpointUrl,
+    path: &str,
+    params: Vec<(String, String)>,
+) -> Result<BuiltRestRequest, EngineError> {
+    let body = params
+        .into_iter()
+        .map(|(key, value)| format!("{}={}", percent_encode(&key), percent_encode(&value)))
+        .collect::<Vec<_>>()
+        .join("&");
+    let path = if path.is_empty() { "/" } else { path };
+    let url = format!("{}{}", endpoint.origin, path);
+
+    Ok(BuiltRestRequest {
+        operation: action.to_string(),
+        method: "POST".to_string(),
+        host: endpoint.host,
+        port: endpoint.port,
+        path_and_query: path.to_string(),
+        headers: BTreeMap::new(),
+        body: Some(body),
+        content_type: Some("application/x-www-form-urlencoded".to_string()),
+        url,
+    })
+}
+
+fn build_aws_endpoint_url(
+    service: Option<&str>,
+    endpoint_url: Option<&str>,
+    event: &Event,
+    environment: &RuntimeEnvironment,
+    action: &str,
+) -> Result<AwsEndpointUrl, EngineError> {
+    let endpoint_template = endpoint_url
+        .map(str::to_string)
+        .or_else(|| {
+            service
+                .and_then(|service| environment.services.get(service))
+                .map(|binding| binding.base_url.clone())
+        })
+        .ok_or_else(|| {
+            service
+                .map(|service| EngineError::MissingAwsServiceBinding {
+                    service: service.to_string(),
+                })
+                .unwrap_or(EngineError::MissingAwsEndpointUrl)
+        })?;
+    let endpoint_url = interpolate_string(&endpoint_template, event, environment, action)
+        .map_err(|error| aws_build_error(action, error))?;
+    parse_aws_endpoint_url(&endpoint_url)
+}
+
+fn fallback_aws_endpoint_url(
+    service: Option<&str>,
+    endpoint_url: Option<&str>,
+    environment: &RuntimeEnvironment,
+) -> String {
+    endpoint_url
+        .map(str::to_string)
+        .or_else(|| {
+            service
+                .and_then(|service| environment.services.get(service))
+                .map(|binding| binding.base_url.clone())
+        })
+        .unwrap_or_else(|| "<unbound>".to_string())
+}
+
+fn aws_queue_path(
+    queue_url: &str,
+    event: &Event,
+    environment: &RuntimeEnvironment,
+    action: &str,
+) -> Result<String, EngineError> {
+    let queue_url = interpolate_string(queue_url, event, environment, action)
+        .map_err(|error| aws_build_error(action, error))?;
+    if let Some(without_scheme) = queue_url.strip_prefix("http://") {
+        let (_, path) =
+            without_scheme
+                .split_once('/')
+                .ok_or_else(|| EngineError::AwsRequestBuild {
+                    action: action.to_string(),
+                    message: format!("queue URL '{queue_url}' does not include a path"),
+                })?;
+        return Ok(format!("/{path}"));
+    }
+
+    if queue_url.starts_with('/') {
+        Ok(queue_url)
+    } else {
+        Err(EngineError::AwsRequestBuild {
+            action: action.to_string(),
+            message: format!("queue URL '{queue_url}' must be an http:// URL or absolute path"),
+        })
+    }
+}
+
+fn aws_build_error(action: &str, error: EngineError) -> EngineError {
+    EngineError::AwsRequestBuild {
+        action: action.to_string(),
+        message: error.to_string(),
+    }
+}
+
+fn aws_operation_observation(
+    service: Option<String>,
+    action: &str,
+    url: &str,
+) -> AwsOperationObservation {
+    AwsOperationObservation {
+        service,
+        action: action.to_string(),
+        url: url.to_string(),
+    }
+}
+
+#[derive(Debug)]
+struct AwsEndpointUrl {
+    origin: String,
+    host: String,
+    port: u16,
+}
+
+fn parse_aws_endpoint_url(endpoint_url: &str) -> Result<AwsEndpointUrl, EngineError> {
+    let without_scheme = endpoint_url.strip_prefix("http://").ok_or_else(|| {
+        EngineError::UnsupportedAwsEndpointUrl {
+            endpoint_url: endpoint_url.to_string(),
+        }
+    })?;
+    let authority = without_scheme.trim_end_matches('/');
+    if authority.contains('/') {
+        return Err(EngineError::UnsupportedAwsEndpointUrl {
+            endpoint_url: endpoint_url.to_string(),
+        });
+    }
+
+    let (host, port) = match authority.rsplit_once(':') {
+        Some((host, port)) => (
+            host.to_string(),
+            port.parse::<u16>()
+                .map_err(|error| EngineError::UnsupportedAwsEndpointUrl {
+                    endpoint_url: format!("{endpoint_url} ({error})"),
+                })?,
+        ),
+        None => (authority.to_string(), 80),
+    };
+
+    Ok(AwsEndpointUrl {
+        origin: format!("http://{}:{}", host, port),
+        host,
+        port,
+    })
 }
 
 #[derive(Debug)]
@@ -1047,8 +1644,8 @@ fn execute_http_request(
     for (key, value) in &request.headers {
         http_request.push_str(&format!("{key}: {value}\r\n"));
     }
-    if request.body.is_some() {
-        http_request.push_str("Content-Type: application/json\r\n");
+    if let Some(content_type) = &request.content_type {
+        http_request.push_str(&format!("Content-Type: {content_type}\r\n"));
     }
     http_request.push_str(&format!("Content-Length: {}\r\n\r\n{body}", body.len()));
 
@@ -1158,6 +1755,273 @@ fn graphql_response_from_http(
         errors,
         extensions,
     })
+}
+
+fn parse_single_xml_text(
+    action: &str,
+    response: &RestResponseObservation,
+    element_name: &str,
+) -> Result<String, EngineError> {
+    ensure_success_xml_response(action, response)?;
+    find_xml_text(response_body_text(response)?, element_name).ok_or_else(|| {
+        EngineError::AwsResponseParse {
+            action: action.to_string(),
+            message: format!("missing <{element_name}> in AWS response"),
+        }
+    })
+}
+
+fn parse_sqs_receive_messages(
+    action: &str,
+    response: &RestResponseObservation,
+) -> Result<Vec<SqsMessageObservation>, EngineError> {
+    ensure_success_xml_response(action, response)?;
+    let body = response_body_text(response)?;
+    let mut reader = Reader::from_str(body);
+    reader.config_mut().trim_text(true);
+
+    let mut messages = Vec::new();
+    let mut current_message: Option<SqsMessageBuilder> = None;
+    let mut current_attribute_name: Option<String> = None;
+    let mut text_target: Option<String> = None;
+
+    loop {
+        match reader.read_event() {
+            Ok(XmlEvent::Start(element)) => {
+                let name = xml_name(element.name());
+                if name == "Message" {
+                    current_message = Some(SqsMessageBuilder::default());
+                } else if current_message.is_some() {
+                    text_target = Some(name);
+                }
+            }
+            Ok(XmlEvent::Text(text)) => {
+                let Some(target) = text_target.as_deref() else {
+                    continue;
+                };
+                let value = text
+                    .xml_content()
+                    .map_err(|error| EngineError::AwsResponseParse {
+                        action: action.to_string(),
+                        message: error.to_string(),
+                    })?
+                    .into_owned();
+                if let Some(message) = current_message.as_mut() {
+                    match target {
+                        "MessageId" => message.message_id = Some(value),
+                        "ReceiptHandle" => message.receipt_handle = Some(value),
+                        "Body" => message
+                            .body
+                            .get_or_insert_with(String::new)
+                            .push_str(&value),
+                        "Name" => current_attribute_name = Some(value),
+                        "Value" => {
+                            if let Some(name) = current_attribute_name.take() {
+                                message.attributes.insert(name, value);
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            Ok(XmlEvent::GeneralRef(reference)) => {
+                let Some(target) = text_target.as_deref() else {
+                    continue;
+                };
+                let value = reference
+                    .decode()
+                    .map_err(|error| EngineError::AwsResponseParse {
+                        action: action.to_string(),
+                        message: error.to_string(),
+                    })?;
+                let value = xml_reference_value(&value);
+                if let Some(message) = current_message.as_mut() {
+                    match target {
+                        "Body" => message
+                            .body
+                            .get_or_insert_with(String::new)
+                            .push_str(&value),
+                        "MessageId" => message
+                            .message_id
+                            .get_or_insert_with(String::new)
+                            .push_str(&value),
+                        "ReceiptHandle" => message
+                            .receipt_handle
+                            .get_or_insert_with(String::new)
+                            .push_str(&value),
+                        "Name" => current_attribute_name
+                            .get_or_insert_with(String::new)
+                            .push_str(&value),
+                        _ => {}
+                    }
+                }
+            }
+            Ok(XmlEvent::End(element)) => {
+                let name = xml_name(element.name());
+                text_target = None;
+                if name == "Message" {
+                    let message = current_message
+                        .take()
+                        .ok_or_else(|| EngineError::AwsResponseParse {
+                            action: action.to_string(),
+                            message: "unexpected </Message>".to_string(),
+                        })?
+                        .build(action)?;
+                    messages.push(message);
+                }
+            }
+            Ok(XmlEvent::Eof) => break,
+            Err(error) => {
+                return Err(EngineError::AwsResponseParse {
+                    action: action.to_string(),
+                    message: error.to_string(),
+                });
+            }
+            _ => {}
+        }
+    }
+
+    Ok(messages)
+}
+
+#[derive(Default)]
+struct SqsMessageBuilder {
+    message_id: Option<String>,
+    receipt_handle: Option<String>,
+    body: Option<String>,
+    attributes: BTreeMap<String, String>,
+}
+
+impl SqsMessageBuilder {
+    fn build(self, action: &str) -> Result<SqsMessageObservation, EngineError> {
+        let message_id = self
+            .message_id
+            .ok_or_else(|| missing_sqs_message_field(action, "MessageId"))?;
+        let receipt_handle = self
+            .receipt_handle
+            .ok_or_else(|| missing_sqs_message_field(action, "ReceiptHandle"))?;
+        let body_text = self
+            .body
+            .ok_or_else(|| missing_sqs_message_field(action, "Body"))?;
+        let body = parse_sqs_body(&body_text);
+        let body_message_json = body
+            .get("Message")
+            .and_then(Value::as_str)
+            .and_then(|message| serde_json::from_str::<Value>(message).ok());
+
+        Ok(SqsMessageObservation {
+            message_id,
+            receipt_handle,
+            body,
+            body_message_json,
+            attributes: self.attributes,
+        })
+    }
+}
+
+fn parse_sqs_body(body_text: &str) -> Value {
+    serde_json::from_str::<Value>(body_text)
+        .or_else(|_| {
+            let unescaped = body_text
+                .replace("&quot;", "\"")
+                .replace("&#34;", "\"")
+                .replace("&amp;", "&");
+            serde_json::from_str::<Value>(&unescaped)
+        })
+        .unwrap_or_else(|_| Value::String(body_text.to_string()))
+}
+
+fn missing_sqs_message_field(action: &str, field: &str) -> EngineError {
+    EngineError::AwsResponseParse {
+        action: action.to_string(),
+        message: format!("SQS message missing <{field}>"),
+    }
+}
+
+fn ensure_success_xml_response(
+    action: &str,
+    response: &RestResponseObservation,
+) -> Result<(), EngineError> {
+    if !(200..300).contains(&response.status) {
+        return Err(EngineError::AwsResponseParse {
+            action: action.to_string(),
+            message: format!("AWS response returned status {}", response.status),
+        });
+    }
+    Ok(())
+}
+
+fn response_body_text(response: &RestResponseObservation) -> Result<&str, EngineError> {
+    match &response.body {
+        RestBody::Text { value } => Ok(value),
+        RestBody::Json { .. } => Err(EngineError::AwsResponseParse {
+            action: "AWS".to_string(),
+            message: "unexpected JSON AWS response body".to_string(),
+        }),
+        RestBody::Empty => Err(EngineError::AwsResponseParse {
+            action: "AWS".to_string(),
+            message: "empty AWS response body".to_string(),
+        }),
+    }
+}
+
+fn find_xml_text(xml: &str, element_name: &str) -> Option<String> {
+    let mut reader = Reader::from_str(xml);
+    reader.config_mut().trim_text(true);
+    let mut in_target = false;
+
+    loop {
+        match reader.read_event() {
+            Ok(XmlEvent::Start(element)) if xml_name(element.name()) == element_name => {
+                in_target = true;
+            }
+            Ok(XmlEvent::Text(text)) if in_target => {
+                return text.xml_content().ok().map(|value| value.into_owned());
+            }
+            Ok(XmlEvent::End(element)) if xml_name(element.name()) == element_name => {
+                in_target = false;
+            }
+            Ok(XmlEvent::Eof) => return None,
+            Err(_) => return None,
+            _ => {}
+        }
+    }
+}
+
+fn xml_reference_value(reference: &str) -> String {
+    match reference {
+        "quot" => "\"".to_string(),
+        "apos" => "'".to_string(),
+        "amp" => "&".to_string(),
+        "lt" => "<".to_string(),
+        "gt" => ">".to_string(),
+        "#34" | "#x22" | "#X22" => "\"".to_string(),
+        _ => format!("&{reference};"),
+    }
+}
+
+fn sqs_receive_extraction_document(messages: &[SqsMessageObservation]) -> Value {
+    let messages = messages
+        .iter()
+        .map(|message| {
+            serde_json::json!({
+                "message_id": message.message_id,
+                "receipt_handle": message.receipt_handle,
+                "body": message.body,
+                "body_message_json": message.body_message_json,
+                "attributes": message.attributes,
+            })
+        })
+        .collect::<Vec<_>>();
+
+    serde_json::json!({
+        "messages": messages,
+        "message": messages.first().cloned().unwrap_or(Value::Null),
+    })
+}
+
+fn xml_name(name: quick_xml::name::QName<'_>) -> String {
+    String::from_utf8_lossy(name.as_ref()).to_string()
 }
 
 fn interpolate_json(

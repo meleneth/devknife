@@ -10,6 +10,9 @@ pub enum Effect {
     Assert(AssertEffect),
     Rest(RestEffect),
     Graphql(GraphqlEffect),
+    SnsPublish(SnsPublishEffect),
+    SqsSend(SqsSendEffect),
+    SqsReceive(SqsReceiveEffect),
 }
 
 impl Effect {
@@ -20,6 +23,9 @@ impl Effect {
             Self::Assert(_) => "assert",
             Self::Rest(_) => "rest",
             Self::Graphql(_) => "graphql",
+            Self::SnsPublish(_) => "sns_publish",
+            Self::SqsSend(_) => "sqs_send",
+            Self::SqsReceive(_) => "sqs_receive",
         }
     }
 }
@@ -115,4 +121,60 @@ pub struct GraphqlEventEmission {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct JsonPathSelector {
     pub from: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct SnsPublishEffect {
+    pub service: Option<String>,
+    pub endpoint_url: Option<String>,
+    pub topic_arn: String,
+    pub message: Value,
+    #[serde(default)]
+    pub emits: Vec<SnsEventEmission>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct SnsEventEmission {
+    pub event_type: String,
+    #[serde(default)]
+    pub payload: BTreeMap<String, JsonPathSelector>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct SqsSendEffect {
+    pub service: Option<String>,
+    pub endpoint_url: Option<String>,
+    pub queue_url: String,
+    pub message: Value,
+    #[serde(default)]
+    pub emits: Vec<SqsEventEmission>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct SqsReceiveEffect {
+    pub service: Option<String>,
+    pub endpoint_url: Option<String>,
+    pub queue_url: String,
+    #[serde(default = "default_sqs_max_messages")]
+    pub max_messages: u8,
+    #[serde(default)]
+    pub wait_time_seconds: u8,
+    #[serde(default)]
+    pub delete_on_success: bool,
+    #[serde(default)]
+    pub emits: Vec<SqsEventEmission>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct SqsEventEmission {
+    pub event_type: String,
+    #[serde(default)]
+    pub payload: BTreeMap<String, JsonPathSelector>,
+}
+
+fn default_sqs_max_messages() -> u8 {
+    1
 }

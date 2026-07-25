@@ -19,3 +19,4 @@ serde_yml = "0.0.12"
 thiserror = "1.0"
 uuid = { version = "1.8", features = ["v4", "serde"] }
 jsonpath-rfc9535 = "0.1.0"
+quick-xml = "0.38"

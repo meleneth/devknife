@@ -48,4 +48,24 @@ pub enum EngineError {
         path: String,
         message: String,
     },
+    #[error("missing AWS service binding for '{service}'")]
+    MissingAwsServiceBinding { service: String },
+    #[error("AWS effect requires service or endpoint_url")]
+    MissingAwsEndpointUrl,
+    #[error("unsupported AWS endpoint URL '{endpoint_url}': only http:// URLs are supported in this phase")]
+    UnsupportedAwsEndpointUrl { endpoint_url: String },
+    #[error("failed to build AWS request for {action}: {message}")]
+    AwsRequestBuild { action: String, message: String },
+    #[error("failed to execute AWS action {action}: {message}")]
+    AwsRequestFailed { action: String, message: String },
+    #[error("failed to parse AWS response for {action}: {message}")]
+    AwsResponseParse { action: String, message: String },
+    #[error("failed to emit AWS event {event_type}: JSONPath '{path}' did not match")]
+    AwsEmissionPathMissing { event_type: String, path: String },
+    #[error("failed to emit AWS event {event_type}: JSONPath '{path}' is invalid: {message}")]
+    AwsEmissionPathInvalid {
+        event_type: String,
+        path: String,
+        message: String,
+    },
 }

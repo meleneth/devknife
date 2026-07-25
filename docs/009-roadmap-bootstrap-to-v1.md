@@ -65,6 +65,8 @@ Implementation note: a first narrow adapter now exists for local HTTP GraphQL en
 - message-to-event emission
 - causal trace integration
 
+Implementation note: a first narrow GoAWS-backed adapter now exists for SNS publish, SQS send, and SQS receive/delete-on-success. It parses GoAWS XML query responses, exposes received SQS message bodies and SNS notification payload JSON to JSONPath extraction, and is covered by `sns-sqs-smoke`.
+
 ## Phase 7: Safety And Run Planning
 
 - declared capabilities
