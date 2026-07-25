@@ -1,3 +1,4 @@
+version: devknife.workflow/v1alpha1
 name: graphql-smoke
 seed_events:
   - id: seed-load-account-users

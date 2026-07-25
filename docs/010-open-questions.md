@@ -49,6 +49,6 @@ Status: Active
 
 ## Recently Narrowed
 
-- YAML is the initial bootstrap workflow authoring format, but schema versioning and strictness remain open.
+- YAML is the initial bootstrap workflow authoring format, with `devknife.workflow/v1alpha1` as the first explicit schema version. Strictness beyond current semantic validation remains open.
 - GoAWS is the first local SQS fixture; whether LocalStack is needed later remains open.
-- The first meaningful cross-protocol demo should build on the new REST, GraphQL, WebSocket, and SQS fixtures after protocol adapters exist.
+- The first meaningful cross-protocol demo now runs against the local REST, GraphQL, WebSocket, and GoAWS fixtures. Next open question is what production-shaped demo should replace the synthetic fixture story.

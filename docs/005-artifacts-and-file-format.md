@@ -55,29 +55,34 @@ No Cargo workspace is created in bootstrap because the implementation plan is st
 
 ## Implementation Update
 
-Phase 1 introduced the Cargo workspace. `crates/devknife-core` owns the initial typed workflow model, in-memory event engine, trace model, and YAML loader. `crates/devknife-cli` owns the `devknife` binary for `run` and `validate`.
+Phase 1 introduced the Cargo workspace. `crates/devknife-core` owns the initial typed workflow model, in-memory event engine, trace model, run planning summary, and YAML loader. `crates/devknife-cli` owns the `devknife` binary for `run`, `plan`, and `validate`.
 
-YAML is now the initial human-authored workflow format for bootstrap. The format is intentionally small and not yet a stable schema. The pipeline is YAML -> parsed config structs -> validation -> `Workflow` -> engine execution.
+YAML is now the initial human-authored workflow format for bootstrap. The format is intentionally small and versioned as `devknife.workflow/v1alpha1`. The pipeline is YAML -> parsed config structs -> validation -> `Workflow` -> planning or engine execution.
 
 Phase 2 adds the first real protocol artifact surface: REST effects in workflow YAML and named service bindings in environment YAML.
 
 Current executable REST effect shape:
 
 ```yaml
-- type: rest
-  service: rest
-  operation: get_account
-  method: GET
-  path: /accounts/{{ event.payload.account_id }}
-  headers:
-    x-correlation-id: "{{ event.payload.correlation_id }}"
-  expect:
-    status: 200
-  emits:
-    - event_type: account.loaded
-      payload:
-        account_id:
-          from: $.body.id
+version: devknife.workflow/v1alpha1
+name: rest-smoke
+handlers:
+  - on: account.load.requested
+    effects:
+      - type: rest
+        service: rest
+        operation: get_account
+        method: GET
+        path: /accounts/{{ event.payload.account_id }}
+        headers:
+          x-correlation-id: "{{ event.payload.correlation_id }}"
+        expect:
+          status: 200
+        emits:
+          - event_type: account.loaded
+            payload:
+              account_id:
+                from: $.body.id
 ```
 
 Current environment binding shape:

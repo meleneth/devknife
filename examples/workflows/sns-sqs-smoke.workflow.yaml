@@ -1,3 +1,4 @@
+version: devknife.workflow/v1alpha1
 name: sns-sqs-smoke
 seed_events:
   - id: seed-publish-event

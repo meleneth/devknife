@@ -13,22 +13,23 @@ Status: Implemented
 - CLI commands:
   - `devknife run <workflow>`
   - `devknife run <workflow> --json`
+  - `devknife plan <workflow>`
   - `devknife validate <workflow>`
 - Executable bootstrap workflow at `examples/workflows/bootstrap.workflow.yaml`.
-- Draft future workflow showing REST, GraphQL, SQS, and WebSocket intent.
+- Executable cross-protocol workflow at `examples/workflows/cross-protocol-smoke.workflow.yaml`.
 - Docker Compose testbed for protocol adapter work.
 
 ## What Remains Illustrative Only
 
-- `examples/workflows/rest-graphql-sqs-websocket.future.workflow.yaml`
-- Secret handling and capabilities
-- Generated run trace files on disk
+- Secret handling
+- Capability enforcement
 
 ## Run The CLI
 
 ```sh
 cargo run -p devknife-cli -- run examples/workflows/bootstrap.workflow.yaml
 cargo run -p devknife-cli -- run examples/workflows/bootstrap.workflow.yaml --json
+cargo run -p devknife-cli -- plan examples/workflows/bootstrap.workflow.yaml
 cargo run -p devknife-cli -- validate examples/workflows/bootstrap.workflow.yaml
 ```
 
@@ -48,11 +49,11 @@ docker compose -f testbed/docker-compose.yml up --build
 ```
 
 The testbed is consumed by the Rust engine for focused REST, GraphQL, SNS/SQS,
-and WebSocket smoke workflows. The combined future workflow remains illustrative.
+WebSocket, and cross-protocol smoke workflows.
 
 ## Known Limitations
 
-- YAML schema is intentionally small and not versioned yet.
+- YAML schema is intentionally small and currently versioned as `devknife.workflow/v1alpha1`.
 - Assertion paths support simple dot-separated payload keys only.
 - Run IDs are UUIDs; event and trace ordering is deterministic within a run.
 - The core is synchronous.

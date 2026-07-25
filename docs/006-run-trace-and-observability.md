@@ -62,4 +62,6 @@ The Rust engine now records each executed effect as one trace entry containing:
 
 For REST effects, the observation includes the resolved method and URL, HTTP status, headers, parsed JSON body when available, assertion results, and any events emitted from response body fields. Emitted events carry `caused_by.event_id` and `caused_by.trace_entry_id`, preserving the path from seed event to REST call to response observation to follow-up event.
 
-Failed REST status assertions fail the run and leave the failed REST observation in the trace.
+The CLI writes the full typed `RunReport` as stable JSON to `runs/<run_id>.trace.json` by default. `--trace-dir <dir>` changes the destination, and `--no-trace-file` disables artifact writing for stdout-only runs.
+
+Failed assertions and failed protocol observations fail the run and leave the failed observation in the trace.

@@ -57,8 +57,11 @@ Useful commands:
 - `cargo test`
 - `cargo run -p devknife-cli -- run examples/workflows/bootstrap.workflow.yaml`
 - `cargo run -p devknife-cli -- run examples/workflows/bootstrap.workflow.yaml --json`
+- `cargo run -p devknife-cli -- plan examples/workflows/bootstrap.workflow.yaml`
 - `cargo run -p devknife-cli -- validate examples/workflows/bootstrap.workflow.yaml`
 - `docker compose -f testbed/docker-compose.yml config`
+
+`run` writes a stable JSON trace artifact to `runs/<run_id>.trace.json` by default. Use `--trace-dir <dir>` to choose another directory or `--no-trace-file` for stdout-only runs.
 
 REST smoke test:
 
@@ -89,5 +92,9 @@ WebSocket smoke test:
 - `cargo run -p devknife-cli -- run examples/workflows/websocket-smoke.workflow.yaml`
 - `docker compose -f testbed/docker-compose.yml down`
 - or `testbed/bin/websocket-smoke`
+
+Cross-protocol smoke test:
+
+- `testbed/bin/cross-protocol-smoke`
 
 The local REST, GraphQL, GoAWS, and WebSocket fixtures are now used by the Rust engine.

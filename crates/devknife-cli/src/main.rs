@@ -3,9 +3,9 @@ use std::{fs, path::PathBuf};
 use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
 use devknife_core::{
-    load_environment_yaml, load_workflow_yaml, validate_workflow, ExecutionLimits,
-    GraphqlAssertionObservation, Observation, RestAssertionObservation, RunReport, RunStatus,
-    Runner, TraceEntryKind,
+    load_environment_yaml, load_workflow_yaml, plan_workflow, validate_workflow, ExecutionLimits,
+    GraphqlAssertionObservation, Observation, RestAssertionObservation, RunPlan, RunReport,
+    RunStatus, Runner, TraceEntryKind,
 };
 
 #[derive(Debug, Parser)]
@@ -24,9 +24,20 @@ enum Command {
         environment: Option<PathBuf>,
         #[arg(long)]
         json: bool,
+        #[arg(long)]
+        show_plan: bool,
+        #[arg(long, value_name = "DIR", default_value = "runs")]
+        trace_dir: PathBuf,
+        #[arg(long)]
+        no_trace_file: bool,
     },
     Validate {
         workflow: PathBuf,
+    },
+    Plan {
+        workflow: PathBuf,
+        #[arg(long)]
+        json: bool,
     },
 }
 
@@ -38,15 +49,32 @@ fn main() -> Result<()> {
             workflow,
             environment,
             json,
+            show_plan,
+            trace_dir,
+            no_trace_file,
         } => {
             let workflow = read_workflow(workflow)?;
+            let plan = plan_workflow(&workflow);
+            if show_plan && !json {
+                print_human_plan(&plan);
+                println!();
+            }
             let environment = read_environment(environment)?;
             let report =
                 Runner::with_environment(ExecutionLimits::default(), environment).run(workflow);
+            let trace_path = if no_trace_file {
+                None
+            } else {
+                Some(write_trace_report(&report, trace_dir)?)
+            };
             if json {
                 println!("{}", serde_json::to_string_pretty(&report)?);
             } else {
                 print_human_report(&report);
+                if let Some(path) = trace_path {
+                    println!();
+                    println!("Trace file: {}", path.display());
+                }
             }
             if report.status == RunStatus::Failed {
                 bail!("workflow run failed");
@@ -56,6 +84,15 @@ fn main() -> Result<()> {
             let workflow = read_workflow(workflow)?;
             validate_workflow(&workflow)?;
             println!("valid workflow: {}", workflow.name);
+        }
+        Command::Plan { workflow, json } => {
+            let workflow = read_workflow(workflow)?;
+            let plan = plan_workflow(&workflow);
+            if json {
+                println!("{}", serde_json::to_string_pretty(&plan)?);
+            } else {
+                print_human_plan(&plan);
+            }
         }
     }
 
@@ -97,6 +134,55 @@ fn print_human_report(report: &RunReport) {
         if let Some(line) = trace_line(&entry.kind) {
             println!("{display_index}. {line}");
             display_index += 1;
+        }
+    }
+}
+
+fn write_trace_report(report: &RunReport, trace_dir: PathBuf) -> Result<PathBuf> {
+    fs::create_dir_all(&trace_dir)
+        .with_context(|| format!("failed to create trace directory {}", trace_dir.display()))?;
+    let path = trace_dir.join(format!("{}.trace.json", report.run_id));
+    let contents = serde_json::to_string_pretty(report)?;
+    fs::write(&path, contents)
+        .with_context(|| format!("failed to write trace file {}", path.display()))?;
+    Ok(path)
+}
+
+fn print_human_plan(plan: &RunPlan) {
+    println!("Workflow: {}", plan.workflow_name);
+    println!("Version: {}", plan.workflow_version);
+
+    println!();
+    println!("Required capabilities:");
+    if plan.required_capabilities.is_empty() {
+        println!("- none");
+    } else {
+        for capability in &plan.required_capabilities {
+            println!(
+                "- {} [{}]: {}",
+                capability.id,
+                serde_json::to_string(&capability.risk)
+                    .expect("capability risk serializes")
+                    .trim_matches('"'),
+                capability.description
+            );
+        }
+    }
+
+    println!();
+    println!("Effects:");
+    if plan.effects.is_empty() {
+        println!("- none");
+    } else {
+        for effect in &plan.effects {
+            println!(
+                "- handlers[{}].effects[{}] on {}: {} ({})",
+                effect.handler_index,
+                effect.effect_index,
+                effect.on,
+                effect.effect_type,
+                effect.capabilities.join(", ")
+            );
         }
     }
 }

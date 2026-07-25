@@ -1,3 +1,4 @@
+version: devknife.workflow/v1alpha1
 name: bootstrap-smoke
 seed_events:
   - id: seed-workflow-started

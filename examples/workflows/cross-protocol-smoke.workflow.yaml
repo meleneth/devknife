@@ -1,0 +1,127 @@
+version: devknife.workflow/v1alpha1
+name: cross-protocol-smoke
+seed_events:
+  - id: seed-demo
+    type: workflow.started
+    payload:
+      account_id: acct_001
+      correlation_id: run_demo_001
+handlers:
+  - on: workflow.started
+    effects:
+      - type: rest
+        service: rest
+        operation: get_account
+        method: GET
+        path: /accounts/{{ event.payload.account_id }}
+        headers:
+          x-correlation-id: "{{ event.payload.correlation_id }}"
+        expect:
+          status: 200
+        emits:
+          - event_type: account.loaded
+            payload:
+              account_id:
+                from: $.body.id
+              name:
+                from: $.body.name
+              correlation_id:
+                from: $.body.correlation_id
+  - on: account.loaded
+    effects:
+      - type: graphql
+        service: graphql
+        operation_name: AccountUsers
+        query: |
+          query AccountUsers($id: ID!) {
+            account(id: $id) {
+              id
+              name
+              users { id email }
+            }
+          }
+        variables:
+          id: "{{ event.payload.account_id }}"
+        expect:
+          status: 200
+        emits:
+          - event_type: account.users.loaded
+            payload:
+              account_id:
+                from: $.data.account.id
+              name:
+                from: $.data.account.name
+              users:
+                from: $.data.account.users
+  - on: account.users.loaded
+    effects:
+      - type: websocket
+        service: websocket
+        session: demo
+        send:
+          json:
+            type: subscribe
+            channel: account-users
+            correlation_id: "{{ event.payload.account_id }}"
+        expect:
+          json:
+            "$.type": subscription.confirmed
+            "$.channel": account-users
+        emits:
+          - event_type: websocket.subscription.confirmed
+            payload:
+              account_id:
+                from: $.correlation_id
+              channel:
+                from: $.channel
+  - on: websocket.subscription.confirmed
+    effects:
+      - type: sns_publish
+        service: aws
+        topic_arn: "{{ env.workflow_events_topic_arn }}"
+        message:
+          account_id: "{{ event.payload.account_id }}"
+          channel: "{{ event.payload.channel }}"
+          status: subscribed
+        emits:
+          - event_type: workflow.event.published
+            payload:
+              message_id:
+                from: $.message_id
+  - on: workflow.event.published
+    effects:
+      - type: sqs_receive
+        service: aws
+        queue_url: "{{ env.workflow_input_queue_url }}"
+        wait_time_seconds: 1
+        delete_on_success: true
+        emits:
+          - event_type: workflow.result.received
+            payload:
+              account_id:
+                from: $.message.body_message_json.account_id
+              status:
+                from: $.message.body_message_json.status
+              sqs_message_id:
+                from: $.message.message_id
+  - on: workflow.result.received
+    effects:
+      - type: assert
+        path: status
+        equals: subscribed
+      - type: sqs_send
+        service: aws
+        queue_url: "{{ env.workflow_results_queue_url }}"
+        message:
+          account_id: "{{ event.payload.account_id }}"
+          status: "{{ event.payload.status }}"
+          source: cross-protocol-smoke
+        emits:
+          - event_type: workflow.result.sent
+            payload:
+              message_id:
+                from: $.message_id
+  - on: workflow.result.sent
+    effects:
+      - type: record
+        message: cross-protocol workflow completed through REST, GraphQL, WebSocket, SNS, and SQS

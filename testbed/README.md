@@ -78,6 +78,12 @@ cargo run -p devknife-cli -- run examples/workflows/websocket-smoke.workflow.yam
 docker compose -f testbed/docker-compose.yml down
 ```
 
+Cross-protocol engine smoke:
+
+```sh
+testbed/bin/cross-protocol-smoke
+```
+
 ## Current Limits
 
 - GoAWS configuration may need minor adjustment if the upstream image changes its config schema.

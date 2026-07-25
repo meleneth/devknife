@@ -2,7 +2,10 @@ use serde::Deserialize;
 use serde_json::Value;
 use thiserror::Error;
 
-use crate::domain::{Effect, Event, Handler, JsonPathSelector, RuntimeEnvironment, Workflow};
+use crate::domain::{
+    default_workflow_version, Effect, Event, Handler, JsonPathSelector, RuntimeEnvironment,
+    Workflow, CURRENT_WORKFLOW_VERSION,
+};
 
 #[derive(Debug, Error)]
 pub enum LoadError {
@@ -43,6 +46,17 @@ pub fn validate_environment(environment: &RuntimeEnvironment) -> Result<(), Load
 }
 
 pub fn validate_workflow(workflow: &Workflow) -> Result<(), LoadError> {
+    if workflow.version.trim().is_empty() {
+        return Err(LoadError::Validation(
+            "workflow version is required".to_string(),
+        ));
+    }
+    if workflow.version != CURRENT_WORKFLOW_VERSION {
+        return Err(LoadError::Validation(format!(
+            "unsupported workflow version '{}'; expected {CURRENT_WORKFLOW_VERSION}",
+            workflow.version
+        )));
+    }
     if workflow.name.trim().is_empty() {
         return Err(LoadError::Validation(
             "workflow name is required".to_string(),
@@ -315,6 +329,8 @@ fn validate_json_path_payload(
 
 #[derive(Debug, Deserialize)]
 struct WorkflowDocument {
+    #[serde(default = "default_workflow_version")]
+    version: String,
     name: String,
     #[serde(default)]
     seed_events: Vec<SeedEventDocument>,
@@ -338,6 +354,7 @@ impl WorkflowDocument {
             .collect();
 
         Workflow {
+            version: self.version,
             name: self.name,
             seed_events,
             handlers: self.handlers,

@@ -2,6 +2,7 @@ mod effect;
 mod environment;
 mod event;
 mod observation;
+mod plan;
 mod trace;
 mod workflow;
 
@@ -20,5 +21,6 @@ pub use observation::{
     WebsocketAssertionObservation, WebsocketOperationObservation, WebsocketReceivedObservation,
     WebsocketSentObservation,
 };
+pub use plan::{plan_workflow, Capability, CapabilityRisk, PlannedEffect, RunPlan};
 pub use trace::{RunReport, RunStatus, TraceEntry, TraceEntryKind, TraceFailure};
-pub use workflow::{Handler, Workflow};
+pub use workflow::{default_workflow_version, Handler, Workflow, CURRENT_WORKFLOW_VERSION};

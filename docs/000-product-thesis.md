@@ -80,21 +80,24 @@ The UI, when added later, is an interface over the engine and artifacts.
 
 ## Bootstrap Scope (Current Repo State)
 
-This repository currently provides planning and project definition only:
+This repository currently provides:
 
 - Thesis and domain docs.
 - Invariants.
 - ADRs.
 - Roadmap.
 - Devcontainer.
-
-No engine implementation is included yet.
+- Rust core and CLI.
+- YAML workflow and environment loading.
+- Trace artifacts.
+- Advisory run planning.
+- Narrow REST, GraphQL, SNS/SQS, and WebSocket adapters.
+- Local deterministic protocol fixtures.
 
 ## Non-Goals For Bootstrap
 
 - No desktop UI yet.
 - No Tauri app yet.
-- No workflow engine implementation yet.
 - No plugin system yet.
 - No scripting runtime yet.
 - No hosted sync service.

@@ -9,21 +9,27 @@ Status: Draft
 - keep secrets out of shared artifacts
 - preserve reproducibility with explicit declarations
 
-## Capabilities Model (Planned)
+## Capabilities Model
 
 Dangerous effects require explicit capabilities.
 
-Illustrative capability set:
+Current run planning reports required capabilities before execution:
 
-- `rest.write`
-- `graphql.mutate`
-- `sqs.send`
-- `sqs.delete`
-- `websocket.send`
+- `workflow.emit`
+- `workflow.record`
+- `workflow.assert`
+- `network.http.read`
+- `network.http.write`
+- `network.graphql`
+- `aws.sns.publish`
+- `aws.sqs.send`
+- `aws.sqs.receive`
+- `aws.sqs.delete`
+- `network.websocket`
 - `future.db.write`
 - `future.shell.exec`
 
-Runs should eventually display required capabilities before start.
+The current model is advisory: `devknife plan <workflow>` displays required capabilities and effect order, and `devknife run --show-plan <workflow>` can print the same summary before execution. Enforcement policy remains future work.
 
 ## Risk Levels
 

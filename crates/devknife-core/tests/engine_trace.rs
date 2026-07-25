@@ -1,7 +1,7 @@
 use devknife_core::{
-    Effect, Event, ExecutionLimits, GraphqlAssertionObservation, Handler, Observation,
-    RestAssertionObservation, RunStatus, Runner, RuntimeEnvironment, ServiceBinding,
-    TraceEntryKind, Workflow,
+    default_workflow_version, plan_workflow, CapabilityRisk, Effect, Event, ExecutionLimits,
+    GraphqlAssertionObservation, Handler, Observation, RestAssertionObservation, RunStatus, Runner,
+    RuntimeEnvironment, ServiceBinding, TraceEntryKind, Workflow, CURRENT_WORKFLOW_VERSION,
 };
 use serde_json::json;
 use std::{
@@ -15,6 +15,7 @@ use tungstenite::{accept, Message as WsMessage};
 #[test]
 fn seed_event_with_no_handlers_traces_and_succeeds() {
     let workflow = Workflow {
+        version: default_workflow_version(),
         name: "no-handlers".to_string(),
         seed_events: vec![Event::seed("seed-1", "workflow.started", json!({}))],
         handlers: vec![],
@@ -36,6 +37,7 @@ fn seed_event_with_no_handlers_traces_and_succeeds() {
 #[test]
 fn emit_effect_enqueues_emitted_event() {
     let workflow = Workflow {
+        version: default_workflow_version(),
         name: "emit".to_string(),
         seed_events: vec![Event::seed("seed-1", "workflow.started", json!({}))],
         handlers: vec![
@@ -70,6 +72,7 @@ fn emit_effect_enqueues_emitted_event() {
 #[test]
 fn emitted_event_links_back_to_effect_that_created_it() {
     let workflow = Workflow {
+        version: default_workflow_version(),
         name: "causal".to_string(),
         seed_events: vec![Event::seed("seed-1", "workflow.started", json!({}))],
         handlers: vec![Handler {
@@ -102,6 +105,7 @@ fn emitted_event_links_back_to_effect_that_created_it() {
 #[test]
 fn multiple_handlers_for_same_event_are_deterministic() {
     let workflow = Workflow {
+        version: default_workflow_version(),
         name: "deterministic".to_string(),
         seed_events: vec![Event::seed("seed-1", "workflow.started", json!({}))],
         handlers: vec![
@@ -139,6 +143,7 @@ fn multiple_handlers_for_same_event_are_deterministic() {
 #[test]
 fn max_event_count_prevents_infinite_loops() {
     let workflow = Workflow {
+        version: default_workflow_version(),
         name: "loop".to_string(),
         seed_events: vec![Event::seed("seed-1", "tick", json!({}))],
         handlers: vec![Handler {
@@ -168,6 +173,7 @@ fn max_event_count_prevents_infinite_loops() {
 #[test]
 fn failed_assertion_fails_run_and_records_failure() {
     let workflow = Workflow {
+        version: default_workflow_version(),
         name: "assertion".to_string(),
         seed_events: vec![Event::seed("seed-1", "check", json!({ "ok": false }))],
         handlers: vec![Handler {
@@ -216,6 +222,89 @@ handlers:
     assert_eq!(workflow.seed_events[0].event_type, "payload.seen");
     assert_eq!(workflow.seed_events[0].payload["nested"]["count"], json!(2));
     assert_eq!(Runner::default().run(workflow).status, RunStatus::Succeeded);
+}
+
+#[test]
+fn workflow_version_defaults_to_current_and_rejects_unknown_versions() {
+    let workflow = devknife_core::load_workflow_yaml(
+        r#"
+name: default-version
+seed_events:
+  - type: workflow.started
+"#,
+    )
+    .expect("workflow parses");
+    assert_eq!(workflow.version, CURRENT_WORKFLOW_VERSION);
+
+    let unsupported = devknife_core::load_workflow_yaml(
+        r#"
+version: devknife.workflow/v9
+name: unsupported-version
+seed_events:
+  - type: workflow.started
+"#,
+    );
+    assert!(unsupported.is_err(), "unsupported versions must fail");
+}
+
+#[test]
+fn workflow_plan_lists_required_capabilities_and_effect_order() {
+    let workflow = devknife_core::load_workflow_yaml(
+        r#"
+version: devknife.workflow/v1alpha1
+name: planned
+seed_events:
+  - type: workflow.started
+handlers:
+  - on: workflow.started
+    effects:
+      - type: rest
+        base_url: http://localhost:18101
+        method: GET
+        path: /health
+      - type: sns_publish
+        endpoint_url: http://localhost:18104
+        topic_arn: arn:aws:sns:us-east-1:100010001000:devknife-events
+        message:
+          ok: true
+      - type: sqs_receive
+        endpoint_url: http://localhost:18104
+        queue_url: http://localhost:18104/100010001000/devknife-workflow-input
+        delete_on_success: true
+"#,
+    )
+    .expect("workflow parses");
+
+    let plan = plan_workflow(&workflow);
+
+    assert_eq!(plan.workflow_name, "planned");
+    assert_eq!(plan.workflow_version, CURRENT_WORKFLOW_VERSION);
+    assert_eq!(
+        plan.effects
+            .iter()
+            .map(|effect| effect.effect_type.as_str())
+            .collect::<Vec<_>>(),
+        vec!["rest", "sns_publish", "sqs_receive"]
+    );
+    let capability_ids = plan
+        .required_capabilities
+        .iter()
+        .map(|capability| capability.id.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        capability_ids,
+        vec![
+            "aws.sns.publish",
+            "aws.sqs.delete",
+            "aws.sqs.receive",
+            "network.http.read"
+        ]
+    );
+    assert!(plan
+        .required_capabilities
+        .iter()
+        .any(|capability| capability.id == "aws.sqs.delete"
+            && capability.risk == CapabilityRisk::Write));
 }
 
 #[test]
