@@ -47,9 +47,24 @@ The devcontainer uses named volumes for:
 
 This reduces repeated download/build cost.
 
-## Deferred Tooling
+## Desktop Tooling
 
-Some heavy desktop-specific Linux headers and runtime details may still be tuned when Phase 8 begins (desktop UI exploration). They are intentionally not treated as a hard runtime dependency of the product at bootstrap.
+The desktop app lives in `apps/desktop` and uses Tauri + Vue + shadcn-vue.
+
+Useful frontend checks:
+
+- `npm --prefix apps/desktop run build`
+- `npm --prefix apps/desktop run dev:web`
+- `npm --prefix apps/desktop run dev:tauri`
+
+On Linux, Tauri requires native WebKit/GTK development packages. The current environment is missing `gdk-3.0.pc`, which blocks `cargo check` for the Tauri crate until the Linux prerequisites are installed. For Debian/Ubuntu-style systems, Tauri documents:
+
+```sh
+sudo apt update
+sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+```
+
+See the official Tauri prerequisites: https://tauri.app/start/prerequisites/
 
 ## Troubleshooting
 
@@ -65,6 +80,7 @@ The initial Rust workspace can be checked with:
 - `cargo test`
 - `cargo clippy --all-targets --all-features`
 - `cargo run -p devknife-cli -- run examples/workflows/bootstrap.workflow.yaml`
+- `npm --prefix apps/desktop run build`
 - `docker compose -f testbed/docker-compose.yml config`
 
 The Docker Compose testbed is a development fixture for future protocol adapters, not a product runtime requirement.

@@ -2,7 +2,7 @@
 
 This repository defines a file-backed, cross-platform service workflow runner for developers. The core model is event-native execution: workflows start from seed events, handlers produce effects, effects produce observations, observations may emit more typed events, and every run yields a causal trace explaining what happened and why.
 
-Status: Bootstrap implementation with narrow REST, GraphQL, SNS, SQS, and WebSocket adapters.
+Status: Bootstrap implementation with narrow REST, GraphQL, SNS, SQS, and WebSocket adapters plus an initial Tauri/Vue desktop shell.
 
 ## What Exists In This Repository
 
@@ -12,11 +12,10 @@ Status: Bootstrap implementation with narrow REST, GraphQL, SNS, SQS, and WebSoc
 - Draft roadmap from bootstrap to v1.
 - Devcontainer setup for Rust + Node toolchains.
 - Rust workspace with a small event-native engine, CLI, YAML loader, typed trace, and narrow REST, GraphQL, SNS, SQS, and WebSocket effects.
+- Tauri + Vue + shadcn-vue desktop scaffold that consumes the core through Tauri commands.
 
 ## What Does Not Exist Yet
 
-- No desktop UI.
-- No Tauri application.
 - No plugin system.
 - No hosted service.
 
@@ -32,7 +31,7 @@ Status: Bootstrap implementation with narrow REST, GraphQL, SNS, SQS, and WebSoc
    - `rustfmt --version`
    - `cargo clippy -V`
    - `node --version`
-   - `pnpm --version`
+   - `npm --version`
 
 See docs/008-devcontainer-and-tooling.md for details and troubleshooting.
 
@@ -59,9 +58,14 @@ Useful commands:
 - `cargo run -p devknife-cli -- run examples/workflows/bootstrap.workflow.yaml --json`
 - `cargo run -p devknife-cli -- plan examples/workflows/bootstrap.workflow.yaml`
 - `cargo run -p devknife-cli -- validate examples/workflows/bootstrap.workflow.yaml`
+- `npm --prefix apps/desktop run build`
+- `npm --prefix apps/desktop run dev:web`
+- `npm --prefix apps/desktop run dev:tauri`
 - `docker compose -f testbed/docker-compose.yml config`
 
 `run` writes a stable JSON trace artifact to `runs/<run_id>.trace.json` by default. Use `--trace-dir <dir>` to choose another directory or `--no-trace-file` for stdout-only runs.
+
+The desktop app lives in `apps/desktop`. `dev:web` runs the Vue shell in a browser with fallback scaffold data; `dev:tauri` runs the desktop app and invokes Rust commands for workflow listing, planning, and execution. On Linux, Tauri requires WebKit/GTK system development packages; see `docs/008-devcontainer-and-tooling.md`.
 
 REST smoke test:
 

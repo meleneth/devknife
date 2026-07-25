@@ -81,13 +81,15 @@ Implementation note: advisory run planning now exists in core and CLI. It report
 
 ## Phase 8: Desktop UI Exploration
 
-Likely stack: Tauri + Vue.
+Stack: Tauri + Vue + shadcn-vue.
 
 - UI consumes engine API/core
 - project browser
 - workflow editor
 - trace viewer
 - run console
+
+Implementation note: an initial desktop shell now exists in `apps/desktop`. It lists example workflows, requests plans from `devknife-core`, calls the engine through Tauri commands, and renders the returned trace/report in Vue.
 
 ## Exit Criteria For V1 Candidate
 

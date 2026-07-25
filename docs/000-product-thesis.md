@@ -88,6 +88,7 @@ This repository currently provides:
 - Roadmap.
 - Devcontainer.
 - Rust core and CLI.
+- Initial Tauri/Vue desktop shell.
 - YAML workflow and environment loading.
 - Trace artifacts.
 - Advisory run planning.
@@ -96,8 +97,6 @@ This repository currently provides:
 
 ## Non-Goals For Bootstrap
 
-- No desktop UI yet.
-- No Tauri app yet.
 - No plugin system yet.
 - No scripting runtime yet.
 - No hosted sync service.

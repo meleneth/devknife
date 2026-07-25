@@ -2,6 +2,7 @@
 members = [
     "crates/devknife-core",
     "crates/devknife-cli",
+    "apps/desktop/src-tauri",
 ]
 resolver = "2"
 
