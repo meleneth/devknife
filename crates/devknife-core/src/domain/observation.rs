@@ -63,6 +63,17 @@ pub enum Observation {
         operation: AwsOperationObservation,
         message: String,
     },
+    WebsocketMessage {
+        operation: WebsocketOperationObservation,
+        sent: WebsocketSentObservation,
+        received: WebsocketReceivedObservation,
+        assertions: Vec<WebsocketAssertionObservation>,
+        emitted_events: Vec<Event>,
+    },
+    WebsocketFailed {
+        operation: WebsocketOperationObservation,
+        message: String,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -137,4 +148,38 @@ pub struct SqsMessageObservation {
     pub body_message_json: Option<Value>,
     #[serde(default)]
     pub attributes: BTreeMap<String, String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WebsocketOperationObservation {
+    pub service: Option<String>,
+    pub session: Option<String>,
+    pub url: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum WebsocketSentObservation {
+    Json { value: Value },
+    Text { value: String },
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum WebsocketReceivedObservation {
+    Json { value: Value },
+    Text { value: String },
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum WebsocketAssertionObservation {
+    JsonFieldPassed {
+        path: String,
+    },
+    JsonFieldFailed {
+        path: String,
+        expected: Value,
+        actual: Option<Value>,
+    },
 }

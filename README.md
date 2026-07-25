@@ -2,7 +2,7 @@
 
 This repository defines a file-backed, cross-platform service workflow runner for developers. The core model is event-native execution: workflows start from seed events, handlers produce effects, effects produce observations, observations may emit more typed events, and every run yields a causal trace explaining what happened and why.
 
-Status: Bootstrap implementation with narrow REST, GraphQL, SNS, and SQS adapters.
+Status: Bootstrap implementation with narrow REST, GraphQL, SNS, SQS, and WebSocket adapters.
 
 ## What Exists In This Repository
 
@@ -11,7 +11,7 @@ Status: Bootstrap implementation with narrow REST, GraphQL, SNS, and SQS adapter
 - Architecture decision records (ADRs).
 - Draft roadmap from bootstrap to v1.
 - Devcontainer setup for Rust + Node toolchains.
-- Rust workspace with a small event-native engine, CLI, YAML loader, typed trace, and narrow REST, GraphQL, SNS, and SQS effects.
+- Rust workspace with a small event-native engine, CLI, YAML loader, typed trace, and narrow REST, GraphQL, SNS, SQS, and WebSocket effects.
 
 ## What Does Not Exist Yet
 
@@ -19,7 +19,6 @@ Status: Bootstrap implementation with narrow REST, GraphQL, SNS, and SQS adapter
 - No Tauri application.
 - No plugin system.
 - No hosted service.
-- No WebSocket adapter yet.
 
 ## Open In Devcontainer
 
@@ -51,7 +50,7 @@ Any syntax examples in this repository are illustrative draft shapes, not final 
 
 ## Initial Implementation
 
-The repository now contains a first Rust workspace with `devknife-core` and `devknife-cli`. The implemented engine is intentionally small: it runs in-memory `emit`, `record`, and event-payload `assert` effects, plus narrow real REST, GraphQL, SNS, and SQS effects that can call local HTTP JSON services or GoAWS, assert status, emit events from RFC 9535 JSONPath selectors such as `$.body.id` or `$.data.account.id`, and record the causal chain in the run trace.
+The repository now contains a first Rust workspace with `devknife-core` and `devknife-cli`. The implemented engine is intentionally small: it runs in-memory `emit`, `record`, and event-payload `assert` effects, plus narrow real REST, GraphQL, SNS, SQS, and WebSocket effects that can call local HTTP JSON services, GoAWS, or a local WebSocket fixture, assert responses/messages, emit events from RFC 9535 JSONPath selectors such as `$.body.id` or `$.data.account.id`, and record the causal chain in the run trace.
 
 Useful commands:
 
@@ -84,4 +83,11 @@ SNS/SQS smoke test:
 - `docker compose -f testbed/docker-compose.yml down`
 - or `testbed/bin/sns-sqs-smoke`
 
-The local REST, GraphQL, and GoAWS fixtures are now used by the Rust engine. The WebSocket fixture remains a future adapter target.
+WebSocket smoke test:
+
+- `docker compose -f testbed/docker-compose.yml up --build -d websocket-service`
+- `cargo run -p devknife-cli -- run examples/workflows/websocket-smoke.workflow.yaml`
+- `docker compose -f testbed/docker-compose.yml down`
+- or `testbed/bin/websocket-smoke`
+
+The local REST, GraphQL, GoAWS, and WebSocket fixtures are now used by the Rust engine.

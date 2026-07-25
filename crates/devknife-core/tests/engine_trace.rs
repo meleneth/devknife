@@ -10,6 +10,7 @@ use std::{
     net::TcpListener,
     thread,
 };
+use tungstenite::{accept, Message as WsMessage};
 
 #[test]
 fn seed_event_with_no_handlers_traces_and_succeeds() {
@@ -877,6 +878,66 @@ handlers:
     assert_eq!(emitted.payload["receive_count"], json!("1"));
 }
 
+#[test]
+fn websocket_effect_sends_json_expects_message_and_emits_event() {
+    let server = WebsocketTestServer::start(|message| {
+        let text = message.into_text().expect("text websocket message");
+        assert!(text.contains(r#""type":"ping""#));
+        assert!(text.contains(r#""correlation_id":"ws-001""#));
+        WsMessage::text(r#"{"type":"pong","correlation_id":"ws-001"}"#)
+    });
+    let workflow = devknife_core::load_workflow_yaml(
+        r#"
+name: websocket-ping
+seed_events:
+  - id: seed-ping
+    type: websocket.ping.requested
+    payload:
+      correlation_id: ws-001
+handlers:
+  - on: websocket.ping.requested
+    effects:
+      - type: websocket
+        service: websocket
+        session: demo
+        send:
+          json:
+            type: ping
+            correlation_id: "{{ event.payload.correlation_id }}"
+        expect:
+          json:
+            "$.type": pong
+            "$.correlation_id": ws-001
+        emits:
+          - event_type: websocket.pong.received
+            payload:
+              message_type:
+                from: $.type
+              correlation_id:
+                from: $.correlation_id
+"#,
+    )
+    .expect("workflow parses");
+
+    let report = runner_with_websocket(server.url()).run(workflow);
+
+    assert_eq!(report.status, RunStatus::Succeeded);
+    let emitted = report
+        .trace
+        .iter()
+        .find_map(|entry| match &entry.kind {
+            TraceEntryKind::EffectExecuted {
+                observation: Observation::WebsocketMessage { emitted_events, .. },
+                ..
+            } => emitted_events.first(),
+            _ => None,
+        })
+        .expect("WebSocket emitted event");
+    assert_eq!(emitted.event_type, "websocket.pong.received");
+    assert_eq!(emitted.payload["message_type"], json!("pong"));
+    assert_eq!(emitted.payload["correlation_id"], json!("ws-001"));
+}
+
 fn runner_with_rest(base_url: String) -> Runner {
     let mut services = BTreeMap::new();
     services.insert("rest".to_string(), ServiceBinding { base_url });
@@ -904,6 +965,18 @@ fn runner_with_graphql(base_url: String) -> Runner {
 fn runner_with_aws(base_url: String) -> Runner {
     let mut services = BTreeMap::new();
     services.insert("aws".to_string(), ServiceBinding { base_url });
+    Runner::with_environment(
+        ExecutionLimits::default(),
+        RuntimeEnvironment {
+            services,
+            ..RuntimeEnvironment::default()
+        },
+    )
+}
+
+fn runner_with_websocket(base_url: String) -> Runner {
+    let mut services = BTreeMap::new();
+    services.insert("websocket".to_string(), ServiceBinding { base_url });
     Runner::with_environment(
         ExecutionLimits::default(),
         RuntimeEnvironment {
@@ -977,6 +1050,33 @@ impl AwsTestServer {
 
     fn base_url(&self) -> String {
         self.base_url.clone()
+    }
+}
+
+struct WebsocketTestServer {
+    url: String,
+}
+
+impl WebsocketTestServer {
+    fn start(handler: impl FnOnce(WsMessage) -> WsMessage + Send + 'static) -> Self {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind websocket test server");
+        let port = listener.local_addr().expect("server address").port();
+        thread::spawn(move || {
+            let (stream, _) = listener.accept().expect("accept websocket request");
+            let mut socket = accept(stream).expect("websocket handshake");
+            let request = socket.read().expect("read websocket message");
+            let response = handler(request);
+            socket.send(response).expect("write websocket response");
+            let _ = socket.close(None);
+        });
+
+        Self {
+            url: format!("ws://127.0.0.1:{port}/ws"),
+        }
+    }
+
+    fn url(&self) -> String {
+        self.url.clone()
     }
 }
 

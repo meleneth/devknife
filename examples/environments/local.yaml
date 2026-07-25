@@ -6,6 +6,8 @@ services:
     base_url: http://localhost:18102/graphql
   aws:
     base_url: http://localhost:18104
+  websocket:
+    base_url: ws://localhost:18103/ws
 values:
   rest_base_url: http://localhost:18101
   graphql_url: http://localhost:18102/graphql

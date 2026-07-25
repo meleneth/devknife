@@ -13,6 +13,7 @@ pub enum Effect {
     SnsPublish(SnsPublishEffect),
     SqsSend(SqsSendEffect),
     SqsReceive(SqsReceiveEffect),
+    Websocket(WebsocketEffect),
 }
 
 impl Effect {
@@ -26,6 +27,7 @@ impl Effect {
             Self::SnsPublish(_) => "sns_publish",
             Self::SqsSend(_) => "sqs_send",
             Self::SqsReceive(_) => "sqs_receive",
+            Self::Websocket(_) => "websocket",
         }
     }
 }
@@ -177,4 +179,44 @@ pub struct SqsEventEmission {
 
 fn default_sqs_max_messages() -> u8 {
     1
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct WebsocketEffect {
+    pub service: Option<String>,
+    pub url: Option<String>,
+    #[serde(default)]
+    pub session: Option<String>,
+    pub send: WebsocketSend,
+    #[serde(default)]
+    pub expect: WebsocketExpectations,
+    #[serde(default = "default_websocket_timeout_ms")]
+    pub timeout_ms: u64,
+    #[serde(default)]
+    pub emits: Vec<WebsocketEventEmission>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WebsocketSend {
+    Json(Value),
+    Text(String),
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct WebsocketExpectations {
+    #[serde(default)]
+    pub json: BTreeMap<String, Value>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct WebsocketEventEmission {
+    pub event_type: String,
+    #[serde(default)]
+    pub payload: BTreeMap<String, JsonPathSelector>,
+}
+
+fn default_websocket_timeout_ms() -> u64 {
+    5_000
 }

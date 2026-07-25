@@ -105,18 +105,36 @@ Current limits:
 
 ## WebSockets
 
-Implementation status: future adapter, not executable yet.
+Implementation status: narrow real adapter against the local WebSocket fixture.
 
 Modeled as live session semantics:
 
 - named sessions
-- connect
 - send
 - receive
 - expect match with timeout
 - emit event from observed message
 - close
 - concurrent observers while other effects execute
+
+Current implementation supports:
+
+- named service binding to a `ws://` URL through environment YAML
+- direct `ws://` URL effects
+- one connection per effect
+- JSON or text sends
+- one received message per effect
+- `timeout_ms` for connect/write/read socket operations
+- expectation checks from RFC 9535 JSONPath selectors over the received message
+- event emission from RFC 9535 JSONPath selectors over the received message
+- typed observations for send, receive, assertion, and connection failures
+
+Current limits:
+
+- `ws://` only; TLS support is future work
+- no persistent session reuse yet, despite the `session` field being captured in trace output
+- no concurrent observers, reconnect policies, ping/pong policy controls, or subprotocol negotiation
+- no protocol presets yet for ActionCable, Socket.IO, GraphQL subscriptions, OBS WebSocket, or similar higher-level protocols
 
 ## Out of Scope For Bootstrap and Early V1
 

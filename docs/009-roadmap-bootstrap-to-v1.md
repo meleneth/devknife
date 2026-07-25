@@ -56,6 +56,8 @@ Implementation note: a first narrow adapter now exists for local HTTP GraphQL en
 - message-to-event emission
 - causal trace integration
 
+Implementation note: a first narrow adapter now exists for local `ws://` endpoints. It opens one connection per effect, sends JSON or text, reads one message with a timeout, checks received payload fields with RFC 9535 JSONPath, emits events from the received message, and is covered by the local `websocket-service` fixture.
+
 ## Phase 6: SQS Adapter
 
 - send
@@ -95,6 +97,6 @@ Likely stack: Tauri + Vue.
 
 ## Phase 1 Implementation Note
 
-The first implementation pass has started Phase 1 with a synchronous in-memory engine, typed causal trace, YAML bootstrap workflow loading, and CLI `run`/`validate` commands. The local protocol testbed was also added early so REST, GraphQL, SQS, and WebSocket adapter work has deterministic fixtures when those phases begin.
+The first implementation pass started Phase 1 with a synchronous in-memory engine, typed causal trace, YAML bootstrap workflow loading, and CLI `run`/`validate` commands. The local protocol testbed was also added early so REST, GraphQL, SQS, and WebSocket adapter work had deterministic fixtures.
 
-Real protocol effects remain deferred to later phases. Phase 3 should now focus on schema hardening, environment binding, diagnostics, and trace artifact persistence rather than first YAML parsing.
+Several real protocol effects now exist. Phase 3 should continue focusing on schema hardening, environment binding, diagnostics, and trace artifact persistence rather than first YAML parsing.

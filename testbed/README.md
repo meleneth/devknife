@@ -1,6 +1,6 @@
 # devknife Local Testbed
 
-This testbed provides deterministic local protocol fixtures for adapter work. The Rust engine now calls the REST, GraphQL, and GoAWS services; WebSocket remains a future adapter fixture.
+This testbed provides deterministic local protocol fixtures for adapter work. The Rust engine now calls the REST, GraphQL, GoAWS, and WebSocket services.
 
 ## Start
 
@@ -70,8 +70,15 @@ cargo run -p devknife-cli -- run examples/workflows/sns-sqs-smoke.workflow.yaml
 docker compose -f testbed/docker-compose.yml down
 ```
 
+WebSocket engine smoke:
+
+```sh
+docker compose -f testbed/docker-compose.yml up --build -d websocket-service
+cargo run -p devknife-cli -- run examples/workflows/websocket-smoke.workflow.yaml
+docker compose -f testbed/docker-compose.yml down
+```
+
 ## Current Limits
 
-- WebSocket fixture is not wired into `devknife-core` yet.
 - GoAWS configuration may need minor adjustment if the upstream image changes its config schema.
 - WebSocket fixture is intentionally simple: JSON `ping` returns `pong`, JSON `subscribe` returns `subscription.confirmed`, and other JSON messages are echoed.

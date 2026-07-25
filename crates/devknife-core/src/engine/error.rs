@@ -68,4 +68,22 @@ pub enum EngineError {
         path: String,
         message: String,
     },
+    #[error("missing WebSocket service binding for '{service}'")]
+    MissingWebsocketServiceBinding { service: String },
+    #[error("WebSocket effect requires service or url")]
+    MissingWebsocketUrl,
+    #[error("unsupported WebSocket URL '{url}': only ws:// URLs are supported in this phase")]
+    UnsupportedWebsocketUrl { url: String },
+    #[error("failed to build WebSocket request for {operation}: {message}")]
+    WebsocketRequestBuild { operation: String, message: String },
+    #[error("failed to emit WebSocket event {event_type}: JSONPath '{path}' did not match")]
+    WebsocketEmissionPathMissing { event_type: String, path: String },
+    #[error(
+        "failed to emit WebSocket event {event_type}: JSONPath '{path}' is invalid: {message}"
+    )]
+    WebsocketEmissionPathInvalid {
+        event_type: String,
+        path: String,
+        message: String,
+    },
 }

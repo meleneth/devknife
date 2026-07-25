@@ -1,0 +1,33 @@
+name: websocket-smoke
+seed_events:
+  - id: seed-subscribe
+    type: websocket.subscribe.requested
+    payload:
+      correlation_id: websocket-smoke-001
+      channel: demo
+handlers:
+  - on: websocket.subscribe.requested
+    effects:
+      - type: websocket
+        service: websocket
+        session: demo
+        send:
+          json:
+            type: subscribe
+            channel: "{{ event.payload.channel }}"
+            correlation_id: "{{ event.payload.correlation_id }}"
+        expect:
+          json:
+            "$.type": subscription.confirmed
+            "$.correlation_id": websocket-smoke-001
+        emits:
+          - event_type: websocket.subscription.confirmed
+            payload:
+              channel:
+                from: $.channel
+              correlation_id:
+                from: $.correlation_id
+  - on: websocket.subscription.confirmed
+    effects:
+      - type: record
+        message: websocket subscription confirmed from fixture

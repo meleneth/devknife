@@ -225,6 +225,46 @@ fn validate_effect(
             }
             Ok(())
         }
+        Effect::Websocket(websocket) => {
+            if websocket
+                .service
+                .as_deref()
+                .unwrap_or_default()
+                .trim()
+                .is_empty()
+                && websocket
+                    .url
+                    .as_deref()
+                    .unwrap_or_default()
+                    .trim()
+                    .is_empty()
+            {
+                return Err(LoadError::Validation(format!(
+                    "handlers[{handler_index}].effects[{effect_index}] requires service or url"
+                )));
+            }
+            if websocket.timeout_ms == 0 {
+                return Err(LoadError::Validation(format!(
+                    "handlers[{handler_index}].effects[{effect_index}].timeout_ms must be greater than 0"
+                )));
+            }
+            for path in websocket.expect.json.keys() {
+                jsonpath_rfc9535::JsonPath::parse(path).map_err(|error| {
+                    LoadError::Validation(format!(
+                        "handlers[{handler_index}].effects[{effect_index}].expect.json.{path} is not valid JSONPath: {error}"
+                    ))
+                })?;
+            }
+            for (emit_index, emit) in websocket.emits.iter().enumerate() {
+                if emit.event_type.trim().is_empty() {
+                    return Err(LoadError::Validation(format!(
+                        "handlers[{handler_index}].effects[{effect_index}].emits[{emit_index}].event_type is required"
+                    )));
+                }
+                validate_json_path_payload(&emit.payload, handler_index, effect_index, emit_index)?;
+            }
+            Ok(())
+        }
         Effect::Emit { .. } | Effect::Record { .. } | Effect::Assert(_) => Ok(()),
     }
 }

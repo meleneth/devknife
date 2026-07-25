@@ -266,6 +266,38 @@ fn trace_line(kind: &TraceEntryKind) -> Option<String> {
                 operation.url,
                 message
             )),
+            Observation::WebsocketMessage {
+                operation,
+                assertions,
+                emitted_events,
+                ..
+            } => {
+                let assertion_summary = assertions.iter().next().map(|assertion| match assertion {
+                    devknife_core::WebsocketAssertionObservation::JsonFieldPassed { path } => {
+                        format!("{path} passed")
+                    }
+                    devknife_core::WebsocketAssertionObservation::JsonFieldFailed {
+                        path, ..
+                    } => {
+                        format!("{path} failed")
+                    }
+                });
+                Some(format!(
+                    "effect {} {} -> message{}{}",
+                    effect.name(),
+                    operation.url,
+                    assertion_summary
+                        .map(|assertion| format!(" ({assertion})"))
+                        .unwrap_or_default(),
+                    emitted_suffix(emitted_events)
+                ))
+            }
+            Observation::WebsocketFailed { operation, message } => Some(format!(
+                "effect {} {} failed: {}",
+                effect.name(),
+                operation.url,
+                message
+            )),
         },
         TraceEntryKind::HandlerSkipped { on, .. } => Some(format!("no handler for {on}")),
         TraceEntryKind::RunStarted { .. } | TraceEntryKind::RunEnded { .. } => None,

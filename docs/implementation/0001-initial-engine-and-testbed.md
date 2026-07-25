@@ -16,13 +16,11 @@ Status: Implemented
   - `devknife validate <workflow>`
 - Executable bootstrap workflow at `examples/workflows/bootstrap.workflow.yaml`.
 - Draft future workflow showing REST, GraphQL, SQS, and WebSocket intent.
-- Docker Compose testbed for future protocol adapter work.
+- Docker Compose testbed for protocol adapter work.
 
 ## What Remains Illustrative Only
 
 - `examples/workflows/rest-graphql-sqs-websocket.future.workflow.yaml`
-- Environment binding in `examples/environments/local.yaml`
-- WebSocket effects in the engine
 - Secret handling and capabilities
 - Generated run trace files on disk
 
@@ -49,13 +47,13 @@ docker compose -f testbed/docker-compose.yml config
 docker compose -f testbed/docker-compose.yml up --build
 ```
 
-The testbed is intentionally not consumed by the Rust engine yet. It exists so
-future REST, GraphQL, SQS, and WebSocket adapters have stable local targets.
+The testbed is consumed by the Rust engine for focused REST, GraphQL, SNS/SQS,
+and WebSocket smoke workflows. The combined future workflow remains illustrative.
 
 ## Known Limitations
 
 - YAML schema is intentionally small and not versioned yet.
 - Assertion paths support simple dot-separated payload keys only.
 - Run IDs are UUIDs; event and trace ordering is deterministic within a run.
-- The core is synchronous because current effects are in-memory only.
-- Protocol-specific effects are currently limited to narrow REST, GraphQL, SNS, and SQS adapters.
+- The core is synchronous.
+- Protocol-specific effects are currently limited to narrow REST, GraphQL, SNS, SQS, and WebSocket adapters.

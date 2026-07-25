@@ -7,6 +7,7 @@ use std::{
 
 use quick_xml::{events::Event as XmlEvent, Reader};
 use serde_json::Value;
+use tungstenite::{client, Message};
 use uuid::Uuid;
 
 use crate::domain::{
@@ -15,7 +16,8 @@ use crate::domain::{
     Observation, RestAssertionObservation, RestBody, RestEffect, RestOperationObservation,
     RestResponseObservation, RunReport, RunStatus, RuntimeEnvironment, SnsPublishEffect,
     SqsMessageObservation, SqsReceiveEffect, SqsSendEffect, TraceEntry, TraceEntryKind,
-    TraceFailure, Workflow,
+    TraceFailure, WebsocketAssertionObservation, WebsocketEffect, WebsocketOperationObservation,
+    WebsocketReceivedObservation, WebsocketSend, WebsocketSentObservation, Workflow,
 };
 
 use super::EngineError;
@@ -150,7 +152,10 @@ impl Runner {
                         }
                         Observation::SnsPublish { emitted_events, .. }
                         | Observation::SqsSend { emitted_events, .. }
-                        | Observation::SqsReceive { emitted_events, .. } => emitted_events.clone(),
+                        | Observation::SqsReceive { emitted_events, .. }
+                        | Observation::WebsocketMessage { emitted_events, .. } => {
+                            emitted_events.clone()
+                        }
                         _ => Vec::new(),
                     };
 
@@ -242,6 +247,9 @@ impl Runner {
             }
             Effect::SqsReceive(sqs) => {
                 self.execute_sqs_receive_effect(sqs, event, trace_entry_id, created_events)
+            }
+            Effect::Websocket(websocket) => {
+                self.execute_websocket_effect(websocket, event, trace_entry_id, created_events)
             }
         }
     }
@@ -788,6 +796,174 @@ impl Runner {
         Ok(emitted_events)
     }
 
+    fn execute_websocket_effect(
+        &self,
+        websocket: &WebsocketEffect,
+        event: &Event,
+        trace_entry_id: &str,
+        created_events: &mut usize,
+    ) -> Result<Observation, EngineError> {
+        let operation = match build_websocket_operation(websocket, event, &self.environment) {
+            Ok(operation) => operation,
+            Err(error) => {
+                return Ok(Observation::WebsocketFailed {
+                    operation: WebsocketOperationObservation {
+                        service: websocket.service.clone(),
+                        session: websocket.session.clone(),
+                        url: fallback_websocket_url(
+                            websocket.service.as_deref(),
+                            websocket.url.as_deref(),
+                            &self.environment,
+                        ),
+                    },
+                    message: error.to_string(),
+                });
+            }
+        };
+        let parsed_url = match parse_websocket_url(&operation.url) {
+            Ok(parsed_url) => parsed_url,
+            Err(error) => {
+                return Ok(Observation::WebsocketFailed {
+                    operation,
+                    message: error.to_string(),
+                });
+            }
+        };
+        let timeout = Duration::from_millis(websocket.timeout_ms);
+        let stream = match TcpStream::connect((parsed_url.host.as_str(), parsed_url.port)) {
+            Ok(stream) => stream,
+            Err(error) => {
+                return Ok(Observation::WebsocketFailed {
+                    operation,
+                    message: error.to_string(),
+                });
+            }
+        };
+        if let Err(error) = stream.set_read_timeout(Some(timeout)) {
+            return Ok(Observation::WebsocketFailed {
+                operation,
+                message: error.to_string(),
+            });
+        }
+        if let Err(error) = stream.set_write_timeout(Some(timeout)) {
+            return Ok(Observation::WebsocketFailed {
+                operation,
+                message: error.to_string(),
+            });
+        }
+
+        let (mut socket, _) = match client(operation.url.as_str(), stream) {
+            Ok(connection) => connection,
+            Err(error) => {
+                return Ok(Observation::WebsocketFailed {
+                    operation,
+                    message: error.to_string(),
+                });
+            }
+        };
+        let (send_message, sent) =
+            match build_websocket_send_message(&websocket.send, event, &self.environment) {
+                Ok(send) => send,
+                Err(error) => {
+                    return Ok(Observation::WebsocketFailed {
+                        operation,
+                        message: error.to_string(),
+                    });
+                }
+            };
+        if let Err(error) = socket.send(send_message) {
+            return Ok(Observation::WebsocketFailed {
+                operation,
+                message: error.to_string(),
+            });
+        }
+
+        let received_message = match socket.read() {
+            Ok(message) => message,
+            Err(error) => {
+                return Ok(Observation::WebsocketFailed {
+                    operation,
+                    message: error.to_string(),
+                });
+            }
+        };
+        let (received, document) = websocket_received_observation(received_message);
+        let assertions = evaluate_websocket_assertions(websocket, &document);
+        let emitted_events = self.build_websocket_emitted_events(
+            websocket,
+            event,
+            trace_entry_id,
+            created_events,
+            &document,
+        )?;
+        let _ = socket.close(None);
+
+        Ok(Observation::WebsocketMessage {
+            operation,
+            sent,
+            received,
+            assertions,
+            emitted_events,
+        })
+    }
+
+    fn build_websocket_emitted_events(
+        &self,
+        websocket: &WebsocketEffect,
+        event: &Event,
+        trace_entry_id: &str,
+        created_events: &mut usize,
+        document: &Value,
+    ) -> Result<Vec<Event>, EngineError> {
+        let mut emitted_events = Vec::new();
+
+        for emission in &websocket.emits {
+            if *created_events >= self.limits.max_events {
+                return Err(EngineError::MaxEventCountExceeded {
+                    limit: self.limits.max_events,
+                });
+            }
+
+            let next_depth = event.depth + 1;
+            if next_depth > self.limits.max_depth {
+                return Err(EngineError::MaxDepthExceeded {
+                    limit: self.limits.max_depth,
+                });
+            }
+
+            let mut payload = serde_json::Map::new();
+            for (field, path) in &emission.payload {
+                let value = select_json_path_value(document, path).map_err(|error| {
+                    EngineError::WebsocketEmissionPathInvalid {
+                        event_type: emission.event_type.clone(),
+                        path: path.from.clone(),
+                        message: error,
+                    }
+                })?;
+                let value = value.ok_or_else(|| EngineError::WebsocketEmissionPathMissing {
+                    event_type: emission.event_type.clone(),
+                    path: path.from.clone(),
+                })?;
+                payload.insert(field.clone(), value);
+            }
+
+            *created_events += 1;
+            emitted_events.push(Event {
+                id: format!("event-{}", created_events),
+                event_type: emission.event_type.clone(),
+                payload: Value::Object(payload),
+                caused_by: Some(EventCause {
+                    event_id: event.id.clone(),
+                    trace_entry_id: trace_entry_id.to_string(),
+                }),
+                sequence: *created_events as u64,
+                depth: next_depth,
+            });
+        }
+
+        Ok(emitted_events)
+    }
+
     fn check_step_limit(&self, processed_steps: usize) -> Result<(), EngineError> {
         if processed_steps >= self.limits.max_steps {
             Err(EngineError::MaxStepCountExceeded {
@@ -836,6 +1012,13 @@ fn observation_failed(observation: &Observation) -> bool {
         }),
         Observation::GraphqlFailed { .. } => true,
         Observation::AwsFailed { .. } => true,
+        Observation::WebsocketMessage { assertions, .. } => assertions.iter().any(|assertion| {
+            matches!(
+                assertion,
+                WebsocketAssertionObservation::JsonFieldFailed { .. }
+            )
+        }),
+        Observation::WebsocketFailed { .. } => true,
         _ => false,
     }
 }
@@ -937,6 +1120,38 @@ fn observation_failure_message(observation: &Observation) -> String {
         Observation::AwsFailed { operation, message } => format!(
             "AWS effect failed during workflow run: {} {}: {}",
             operation.action, operation.url, message
+        ),
+        Observation::WebsocketMessage {
+            operation,
+            assertions,
+            ..
+        } => assertions
+            .iter()
+            .find_map(|assertion| match assertion {
+                WebsocketAssertionObservation::JsonFieldFailed {
+                    path,
+                    expected,
+                    actual,
+                } => Some(format!(
+                    "WebSocket assertion failed during workflow run: {} expected {}, actual {}",
+                    path,
+                    expected,
+                    actual
+                        .as_ref()
+                        .map(Value::to_string)
+                        .unwrap_or_else(|| "<missing>".to_string())
+                )),
+                WebsocketAssertionObservation::JsonFieldPassed { .. } => None,
+            })
+            .unwrap_or_else(|| {
+                format!(
+                    "WebSocket effect failed during workflow run: {}",
+                    operation.url
+                )
+            }),
+        Observation::WebsocketFailed { operation, message } => format!(
+            "WebSocket effect failed during workflow run: {}: {}",
+            operation.url, message
         ),
         _ => "workflow run failed".to_string(),
     }
@@ -1533,6 +1748,231 @@ fn parse_aws_endpoint_url(endpoint_url: &str) -> Result<AwsEndpointUrl, EngineEr
         host,
         port,
     })
+}
+
+fn build_websocket_operation(
+    websocket: &WebsocketEffect,
+    event: &Event,
+    environment: &RuntimeEnvironment,
+) -> Result<WebsocketOperationObservation, EngineError> {
+    let url_template = websocket
+        .url
+        .clone()
+        .or_else(|| {
+            websocket
+                .service
+                .as_ref()
+                .and_then(|service| environment.services.get(service))
+                .map(|binding| binding.base_url.clone())
+        })
+        .ok_or_else(|| {
+            websocket
+                .service
+                .as_ref()
+                .map(|service| EngineError::MissingWebsocketServiceBinding {
+                    service: service.clone(),
+                })
+                .unwrap_or(EngineError::MissingWebsocketUrl)
+        })?;
+    let operation = websocket
+        .session
+        .as_deref()
+        .unwrap_or("websocket")
+        .to_string();
+    let url =
+        interpolate_string(&url_template, event, environment, &operation).map_err(|error| {
+            EngineError::WebsocketRequestBuild {
+                operation: operation.clone(),
+                message: error.to_string(),
+            }
+        })?;
+
+    Ok(WebsocketOperationObservation {
+        service: websocket.service.clone(),
+        session: websocket.session.clone(),
+        url,
+    })
+}
+
+fn fallback_websocket_url(
+    service: Option<&str>,
+    url: Option<&str>,
+    environment: &RuntimeEnvironment,
+) -> String {
+    url.map(str::to_string)
+        .or_else(|| {
+            service
+                .and_then(|service| environment.services.get(service))
+                .map(|binding| binding.base_url.clone())
+        })
+        .unwrap_or_else(|| "<unbound>".to_string())
+}
+
+#[derive(Debug)]
+struct ParsedWebsocketUrl {
+    host: String,
+    port: u16,
+}
+
+fn parse_websocket_url(url: &str) -> Result<ParsedWebsocketUrl, EngineError> {
+    let without_scheme =
+        url.strip_prefix("ws://")
+            .ok_or_else(|| EngineError::UnsupportedWebsocketUrl {
+                url: url.to_string(),
+            })?;
+    let authority = without_scheme
+        .split_once('/')
+        .map(|(authority, _)| authority)
+        .unwrap_or(without_scheme);
+    if authority.is_empty() {
+        return Err(EngineError::UnsupportedWebsocketUrl {
+            url: url.to_string(),
+        });
+    }
+    let (host, port) = match authority.rsplit_once(':') {
+        Some((host, port)) => (
+            host.to_string(),
+            port.parse::<u16>()
+                .map_err(|error| EngineError::UnsupportedWebsocketUrl {
+                    url: format!("{url} ({error})"),
+                })?,
+        ),
+        None => (authority.to_string(), 80),
+    };
+
+    Ok(ParsedWebsocketUrl { host, port })
+}
+
+fn build_websocket_send_message(
+    send: &WebsocketSend,
+    event: &Event,
+    environment: &RuntimeEnvironment,
+) -> Result<(Message, WebsocketSentObservation), EngineError> {
+    match send {
+        WebsocketSend::Json(value) => {
+            let value =
+                interpolate_json(value, event, environment, "websocket").map_err(|error| {
+                    EngineError::WebsocketRequestBuild {
+                        operation: "websocket".to_string(),
+                        message: error.to_string(),
+                    }
+                })?;
+            let text = serde_json::to_string(&value).expect("JSON values serialize");
+            Ok((
+                Message::text(text),
+                WebsocketSentObservation::Json { value },
+            ))
+        }
+        WebsocketSend::Text(value) => {
+            let value =
+                interpolate_string(value, event, environment, "websocket").map_err(|error| {
+                    EngineError::WebsocketRequestBuild {
+                        operation: "websocket".to_string(),
+                        message: error.to_string(),
+                    }
+                })?;
+            Ok((
+                Message::text(value.clone()),
+                WebsocketSentObservation::Text { value },
+            ))
+        }
+    }
+}
+
+fn websocket_received_observation(message: Message) -> (WebsocketReceivedObservation, Value) {
+    match message {
+        Message::Text(text) => {
+            let text = text.to_string();
+            match serde_json::from_str::<Value>(&text) {
+                Ok(value) => (
+                    WebsocketReceivedObservation::Json {
+                        value: value.clone(),
+                    },
+                    value,
+                ),
+                Err(_) => (
+                    WebsocketReceivedObservation::Text {
+                        value: text.clone(),
+                    },
+                    serde_json::json!({ "text": text }),
+                ),
+            }
+        }
+        Message::Binary(bytes) => {
+            let text = String::from_utf8_lossy(&bytes).to_string();
+            (
+                WebsocketReceivedObservation::Text {
+                    value: text.clone(),
+                },
+                serde_json::json!({ "text": text }),
+            )
+        }
+        Message::Ping(bytes) | Message::Pong(bytes) => {
+            let text = String::from_utf8_lossy(&bytes).to_string();
+            (
+                WebsocketReceivedObservation::Text {
+                    value: text.clone(),
+                },
+                serde_json::json!({ "text": text }),
+            )
+        }
+        Message::Close(close) => {
+            let text = close
+                .map(|close| close.reason.to_string())
+                .unwrap_or_else(|| "close".to_string());
+            (
+                WebsocketReceivedObservation::Text {
+                    value: text.clone(),
+                },
+                serde_json::json!({ "text": text }),
+            )
+        }
+        Message::Frame(_) => (
+            WebsocketReceivedObservation::Text {
+                value: "frame".to_string(),
+            },
+            serde_json::json!({ "text": "frame" }),
+        ),
+    }
+}
+
+fn evaluate_websocket_assertions(
+    websocket: &WebsocketEffect,
+    document: &Value,
+) -> Vec<WebsocketAssertionObservation> {
+    websocket
+        .expect
+        .json
+        .iter()
+        .map(
+            |(path, expected)| match jsonpath_rfc9535::JsonPath::parse(path) {
+                Ok(query) => {
+                    let values = query.query_values(document);
+                    let actual = match values.as_slice() {
+                        [] => None,
+                        [value] => Some((*value).clone()),
+                        values => Some(Value::Array(
+                            values.iter().map(|value| (*value).clone()).collect(),
+                        )),
+                    };
+                    if actual.as_ref() == Some(expected) {
+                        WebsocketAssertionObservation::JsonFieldPassed { path: path.clone() }
+                    } else {
+                        WebsocketAssertionObservation::JsonFieldFailed {
+                            path: path.clone(),
+                            expected: expected.clone(),
+                            actual,
+                        }
+                    }
+                }
+                Err(_) => WebsocketAssertionObservation::JsonFieldFailed {
+                    path: path.clone(),
+                    expected: expected.clone(),
+                    actual: None,
+                },
+            },
+        )
+        .collect()
 }
 
 #[derive(Debug)]
