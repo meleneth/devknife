@@ -246,7 +246,9 @@ async function refreshWorkflows() {
     (workflow) => workflow.path === previousPath,
   )
     ? previousPath
-    : (workflows.value[0]?.path ?? '')
+    : (workflows.value.find((workflow) => workflow.valid)?.path ??
+      workflows.value[0]?.path ??
+      '')
   if (selectedPath.value) {
     await loadWorkflow()
   }
@@ -263,7 +265,9 @@ async function refreshEnvironments() {
       (environment) => environment.path === previousPath,
     )
       ? previousPath
-      : (environments.value[0]?.path ?? '')
+      : (environments.value.find((environment) => environment.valid)?.path ??
+        environments.value[0]?.path ??
+        '')
   } catch (cause) {
     environments.value = []
     selectedEnvironmentPath.value = ''

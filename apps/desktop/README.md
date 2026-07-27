@@ -48,5 +48,7 @@ Persisted history and report reads use latest-request-wins ordering, and history
 inline retry instead of silently appearing empty.
 Artifact discovery isolates invalid YAML files: valid workflows and environments remain listed,
 invalid workflows stay editable, and per-file validation errors are shown in place.
+Automatic selection prefers a valid artifact while preserving any explicit selection that still
+exists.
 
 On Linux, Tauri requires WebKit/GTK development packages. See `../../docs/008-devcontainer-and-tooling.md`.
