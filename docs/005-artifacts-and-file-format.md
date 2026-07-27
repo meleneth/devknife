@@ -106,3 +106,5 @@ in CI.
 `devknife validate <workflow> --environment <environment>` additionally preflights named services,
 environment values, and secret references. CLI and desktop runs perform this binding preflight
 before executing effects.
+Workflow validation rejects unbalanced or unsupported template expressions. The supported
+namespaces are `event.payload.*`, `env.*`, and `secret.*`.

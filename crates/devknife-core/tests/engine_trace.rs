@@ -282,6 +282,51 @@ handlers:
 }
 
 #[test]
+fn workflow_loader_rejects_invalid_template_expressions() {
+    let unsupported = devknife_core::load_workflow_yaml(
+        r#"
+name: unsupported-template
+handlers:
+  - on: workflow.started
+    effects:
+      - type: record
+        message: "{{ system.password }}"
+"#,
+    )
+    .expect_err("unsupported template must fail")
+    .to_string();
+    assert!(unsupported.contains("unsupported template expression 'system.password'"));
+
+    let unclosed = devknife_core::load_workflow_yaml(
+        r#"
+name: unclosed-template
+handlers:
+  - on: workflow.started
+    effects:
+      - type: record
+        message: "{{ env.message"
+"#,
+    )
+    .expect_err("unclosed template must fail")
+    .to_string();
+    assert!(unclosed.contains("unclosed template expression"));
+
+    let empty_reference = devknife_core::load_workflow_yaml(
+        r#"
+name: empty-template
+handlers:
+  - on: workflow.started
+    effects:
+      - type: record
+        message: "{{ secret. }}"
+"#,
+    )
+    .expect_err("empty template reference must fail")
+    .to_string();
+    assert!(empty_reference.contains("unsupported template expression 'secret.'"));
+}
+
+#[test]
 fn environment_loader_rejects_unknown_fields() {
     let unknown_section = devknife_core::load_environment_yaml(
         r#"

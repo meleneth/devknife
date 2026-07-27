@@ -155,6 +155,9 @@ pub fn validate_workflow(workflow: &Workflow) -> Result<(), LoadError> {
         ));
     }
 
+    let document = serde_json::to_value(workflow).expect("workflow serializes");
+    validate_template_expressions(&document)?;
+
     for (index, event) in workflow.seed_events.iter().enumerate() {
         if event.event_type.trim().is_empty() {
             return Err(LoadError::Validation(format!(
@@ -176,6 +179,60 @@ pub fn validate_workflow(workflow: &Workflow) -> Result<(), LoadError> {
     }
 
     Ok(())
+}
+
+fn validate_template_expressions(value: &Value) -> Result<(), LoadError> {
+    match value {
+        Value::String(value) => validate_template_string(value),
+        Value::Array(values) => {
+            for value in values {
+                validate_template_expressions(value)?;
+            }
+            Ok(())
+        }
+        Value::Object(values) => {
+            for value in values.values() {
+                validate_template_expressions(value)?;
+            }
+            Ok(())
+        }
+        Value::Null | Value::Bool(_) | Value::Number(_) => Ok(()),
+    }
+}
+
+fn validate_template_string(value: &str) -> Result<(), LoadError> {
+    let mut remaining = value;
+    loop {
+        let opening = remaining.find("{{");
+        let closing = remaining.find("}}");
+        if closing.is_some_and(|closing| opening.is_none_or(|opening| closing < opening)) {
+            return Err(LoadError::Validation(format!(
+                "unexpected template closing delimiter in '{value}'"
+            )));
+        }
+
+        let Some(opening) = opening else {
+            return Ok(());
+        };
+        let after_opening = &remaining[opening + 2..];
+        let Some(closing) = after_opening.find("}}") else {
+            return Err(LoadError::Validation(format!(
+                "unclosed template expression in '{value}'"
+            )));
+        };
+        let expression = after_opening[..closing].trim();
+        let valid = ["event.payload.", "env.", "secret."].iter().any(|prefix| {
+            expression
+                .strip_prefix(prefix)
+                .is_some_and(|name| !name.is_empty())
+        });
+        if !valid {
+            return Err(LoadError::Validation(format!(
+                "unsupported template expression '{expression}'"
+            )));
+        }
+        remaining = &after_opening[closing + 2..];
+    }
 }
 
 fn validate_effect(
