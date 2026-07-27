@@ -34,7 +34,26 @@ class RestService < Sinatra::Base
     body = JSON.parse(request.body.read)
     id = "acct_created_001"
 
+    status 201
     JSON.generate(with_correlation(id: id, name: body.fetch("name")))
+  rescue JSON::ParserError, KeyError => error
+    status 400
+    JSON.generate(error: error.message)
+  end
+
+  post "/accounts/:id/users" do
+    halt 404, JSON.generate(error: "account not found") unless
+      ACCOUNTS.key?(params[:id]) || params[:id] == "acct_created_001"
+
+    body = JSON.parse(request.body.read)
+    status 201
+    JSON.generate(
+      with_correlation(
+        id: "user_created_001",
+        account_id: params[:id],
+        email: body.fetch("email")
+      )
+    )
   rescue JSON::ParserError, KeyError => error
     status 400
     JSON.generate(error: error.message)

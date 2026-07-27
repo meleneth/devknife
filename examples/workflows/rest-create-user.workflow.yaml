@@ -1,0 +1,61 @@
+version: devknife.workflow/v1alpha1
+name: rest-create-user
+seed_events:
+  - id: seed-create-account
+    type: account.create.requested
+    payload:
+      name: Chained API Account
+      correlation_id: rest-create-user-001
+handlers:
+  - on: account.create.requested
+    effects:
+      - type: rest
+        service: rest
+        operation: create_account
+        method: POST
+        path: /accounts
+        headers:
+          x-correlation-id: "{{ event.payload.correlation_id }}"
+        json_body:
+          name: "{{ event.payload.name }}"
+        expect:
+          status: 201
+        emits:
+          - event_type: account.created
+            payload:
+              account_id:
+                from: $.body.id
+              correlation_id:
+                from: $.body.correlation_id
+  - on: account.created
+    effects:
+      - type: rest
+        service: rest
+        operation: create_account_user
+        method: POST
+        path: /accounts/{{ event.payload.account_id }}/users
+        headers:
+          x-correlation-id: "{{ event.payload.correlation_id }}"
+        json_body:
+          email: chained@example.test
+        expect:
+          status: 201
+        emits:
+          - event_type: account.user.created
+            payload:
+              account_id:
+                from: $.body.account_id
+              user_id:
+                from: $.body.id
+              email:
+                from: $.body.email
+  - on: account.user.created
+    effects:
+      - type: assert
+        path: account_id
+        equals: acct_created_001
+      - type: assert
+        path: email
+        equals: chained@example.test
+      - type: record
+        message: created a user using the account ID returned by the first REST API

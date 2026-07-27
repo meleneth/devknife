@@ -57,6 +57,7 @@ Useful commands:
 - `cargo run -p devknife-cli -- run examples/workflows/bootstrap.workflow.yaml`
 - `cargo run -p devknife-cli -- run examples/workflows/bootstrap.workflow.yaml --json`
 - `cargo run -p devknife-cli -- run examples/workflows/bootstrap.workflow.yaml --dry-run`
+- `testbed/bin/rest-create-user-smoke`
 - `cargo run -p devknife-cli -- plan examples/workflows/bootstrap.workflow.yaml`
 - `cargo run -p devknife-cli -- validate examples/workflows/bootstrap.workflow.yaml`
 - `cargo run -p devknife-cli -- validate examples/workflows/rest-smoke.workflow.yaml --environment examples/environments/local.yaml`

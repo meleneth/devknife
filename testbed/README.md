@@ -53,6 +53,12 @@ cargo run -p devknife-cli -- run examples/workflows/rest-smoke.workflow.yaml
 docker compose -f testbed/docker-compose.yml down
 ```
 
+Chained REST write smoke (creates an account, extracts its ID, and creates a user with it):
+
+```sh
+testbed/bin/rest-create-user-smoke
+```
+
 GraphQL-only engine smoke:
 
 ```sh
