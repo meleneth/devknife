@@ -286,6 +286,15 @@ fn validate_effect(
                     "handlers[{handler_index}].effects[{effect_index}].path is required"
                 )));
             }
+            if rest
+                .expect
+                .status
+                .is_some_and(|status| !(100..=599).contains(&status))
+            {
+                return Err(LoadError::Validation(format!(
+                    "handlers[{handler_index}].effects[{effect_index}].expect.status must be between 100 and 599"
+                )));
+            }
             for (emit_index, emit) in rest.emits.iter().enumerate() {
                 if emit.event_type.trim().is_empty() {
                     return Err(LoadError::Validation(format!(
@@ -317,6 +326,15 @@ fn validate_effect(
             if graphql.query.trim().is_empty() {
                 return Err(LoadError::Validation(format!(
                     "handlers[{handler_index}].effects[{effect_index}].query is required"
+                )));
+            }
+            if graphql
+                .expect
+                .status
+                .is_some_and(|status| !(100..=599).contains(&status))
+            {
+                return Err(LoadError::Validation(format!(
+                    "handlers[{handler_index}].effects[{effect_index}].expect.status must be between 100 and 599"
                 )));
             }
             for (emit_index, emit) in graphql.emits.iter().enumerate() {
@@ -388,6 +406,11 @@ fn validate_effect(
             if sqs.max_messages == 0 || sqs.max_messages > 10 {
                 return Err(LoadError::Validation(format!(
                     "handlers[{handler_index}].effects[{effect_index}].max_messages must be between 1 and 10"
+                )));
+            }
+            if sqs.wait_time_seconds > 20 {
+                return Err(LoadError::Validation(format!(
+                    "handlers[{handler_index}].effects[{effect_index}].wait_time_seconds must be between 0 and 20"
                 )));
             }
             for (emit_index, emit) in sqs.emits.iter().enumerate() {

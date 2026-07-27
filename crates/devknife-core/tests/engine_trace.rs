@@ -355,6 +355,43 @@ seed_events:
 }
 
 #[test]
+fn workflow_loader_rejects_out_of_range_protocol_settings() {
+    let http_status = devknife_core::load_workflow_yaml(
+        r#"
+name: invalid-http-status
+handlers:
+  - on: workflow.started
+    effects:
+      - type: rest
+        base_url: http://localhost:18101
+        method: GET
+        path: /health
+        expect:
+          status: 99
+"#,
+    )
+    .expect_err("invalid HTTP status must fail")
+    .to_string();
+    assert!(http_status.contains("expect.status must be between 100 and 599"));
+
+    let sqs_wait = devknife_core::load_workflow_yaml(
+        r#"
+name: invalid-sqs-wait
+handlers:
+  - on: workflow.started
+    effects:
+      - type: sqs_receive
+        endpoint_url: http://localhost:18104
+        queue_url: http://localhost:18104/queue
+        wait_time_seconds: 21
+"#,
+    )
+    .expect_err("invalid SQS wait time must fail")
+    .to_string();
+    assert!(sqs_wait.contains("wait_time_seconds must be between 0 and 20"));
+}
+
+#[test]
 fn environment_loader_rejects_unknown_fields() {
     let unknown_section = devknife_core::load_environment_yaml(
         r#"

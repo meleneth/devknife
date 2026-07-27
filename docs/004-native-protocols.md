@@ -92,6 +92,10 @@ Current implementation supports:
 - `sns_publish` to a topic ARN
 - `sqs_send` to a queue URL
 - `sqs_receive` from a queue URL with `max_messages`, `wait_time_seconds`, and `delete_on_success`
+
+Workflow validation enforces SQS request limits (`max_messages` 1–10 and
+`wait_time_seconds` 0–20) before execution. REST and GraphQL expected HTTP statuses must be in the
+100–599 range.
 - typed observations for publish/send/receive and received message metadata
 - parsing JSON SQS bodies and GoAWS SNS notification envelopes
 - convenience extraction from `$.message.body_message_json.*` when an SNS notification `Message` field contains JSON
