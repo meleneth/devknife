@@ -38,5 +38,7 @@ Refreshing workflow or environment lists preserves the current selection while i
 Concurrent startup and planning loads keep controls disabled until every active operation finishes.
 Environment discovery failures are shown beside the selector instead of silently appearing as an
 empty environment list.
+Workflow source reads ignore stale responses from earlier selections and lock the editor until the
+current file finishes loading.
 
 On Linux, Tauri requires WebKit/GTK development packages. See `../../docs/008-devcontainer-and-tooling.md`.

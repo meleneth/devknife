@@ -128,6 +128,7 @@ const savedWorkflowSource = ref('')
 const runReport = ref<RunReport | null>(null)
 const runHistory = ref<RunSummary[]>([])
 const loading = ref(false)
+const sourceLoading = ref(false)
 const running = ref(false)
 const saving = ref(false)
 const error = ref('')
@@ -139,6 +140,7 @@ const traceQuery = ref('')
 const plannedWorkflowPath = ref('')
 const plannedEnvironmentPath = ref('')
 let planRequestId = 0
+let sourceRequestId = 0
 let loadingOperationCount = 0
 
 const selectedWorkflow = computed(() =>
@@ -306,19 +308,31 @@ async function loadPlan() {
 async function loadSource() {
   if (!selectedPath.value) return
 
+  const requestId = ++sourceRequestId
+  const workflowPath = selectedPath.value
+  sourceLoading.value = true
+  workflowSource.value = ''
+  savedWorkflowSource.value = ''
+  sourceStatus.value = ''
+  sourceValidation.value = null
+  beginLoading()
   try {
-    workflowSource.value = await invoke<string>('read_workflow_source', {
-      path: selectedPath.value,
+    const source = await invoke<string>('read_workflow_source', {
+      path: workflowPath,
     })
-    savedWorkflowSource.value = workflowSource.value
-    sourceStatus.value = ''
-    sourceValidation.value = null
+    if (requestId !== sourceRequestId) return
+
+    workflowSource.value = source
+    savedWorkflowSource.value = source
   } catch (cause) {
-    workflowSource.value = ''
-    savedWorkflowSource.value = ''
-    sourceStatus.value = ''
-    sourceValidation.value = null
+    if (requestId !== sourceRequestId) return
+
     error.value = `Unable to load workflow source. ${String(cause)}`
+  } finally {
+    if (requestId === sourceRequestId) {
+      sourceLoading.value = false
+    }
+    endLoading()
   }
 }
 
@@ -668,7 +682,7 @@ function traceDetail(entry: TraceEntry) {
                           <Button
                             variant="outline"
                             class="border-2 border-black bg-white text-black shadow-[2px_2px_0_#000]"
-                            :disabled="saving || !sourceDirty"
+                            :disabled="saving || sourceLoading || !sourceDirty"
                             @click="discardSourceChanges"
                           >
                             <RotateCcw class="size-4" />
@@ -677,7 +691,7 @@ function traceDetail(entry: TraceEntry) {
                           <Button
                             variant="outline"
                             class="border-2 border-black bg-[#6ee7f9] text-black shadow-[2px_2px_0_#000]"
-                            :disabled="saving || !workflowSource"
+                            :disabled="saving || sourceLoading || !workflowSource"
                             @click="validateSource"
                           >
                             <ShieldCheck class="size-4" />
@@ -685,7 +699,7 @@ function traceDetail(entry: TraceEntry) {
                           </Button>
                           <Button
                             class="border-2 border-black bg-[#ff5c8a] text-black shadow-[2px_2px_0_#000]"
-                            :disabled="saving || !sourceDirty"
+                            :disabled="saving || sourceLoading || !sourceDirty"
                             @click="saveSource"
                           >
                             <Save class="size-4" />
@@ -721,6 +735,7 @@ function traceDetail(entry: TraceEntry) {
                         spellcheck="false"
                         aria-label="Workflow YAML source"
                         class="min-h-[520px] resize-none border-2 border-black bg-neutral-950 p-4 font-mono text-xs leading-5 text-lime-200"
+                        :disabled="sourceLoading || saving"
                         @update:model-value="markSourceChanged"
                       />
                     </CardContent>
