@@ -117,8 +117,10 @@ fn run_workflow_file(path: String) -> Result<RunReport, String> {
     let workflow_path = resolve_repo_path(&root, &path)?;
     let workflow = read_workflow(&workflow_path)?;
     let environment = read_environment(&root)?;
+    let report = Runner::with_environment(ExecutionLimits::default(), environment).run(workflow);
 
-    Ok(Runner::with_environment(ExecutionLimits::default(), environment).run(workflow))
+    write_run_report(&root, &report)?;
+    Ok(report)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -161,6 +163,21 @@ fn read_environment(root: &Path) -> Result<RuntimeEnvironment, String> {
     let contents = fs::read_to_string(&path)
         .map_err(|error| format!("failed to read environment {}: {error}", path.display()))?;
     load_environment_yaml(&contents).map_err(|error| error.to_string())
+}
+
+fn write_run_report(root: &Path, report: &RunReport) -> Result<(), String> {
+    let run_dir = root.join("runs");
+    fs::create_dir_all(&run_dir).map_err(|error| {
+        format!(
+            "failed to create run directory {}: {error}",
+            run_dir.display()
+        )
+    })?;
+    let path = run_dir.join(format!("{}.trace.json", report.run_id));
+    let contents = serde_json::to_string_pretty(report)
+        .map_err(|error| format!("failed to serialize run report: {error}"))?;
+    fs::write(&path, contents)
+        .map_err(|error| format!("failed to write run report {}: {error}", path.display()))
 }
 
 fn repo_root() -> Result<PathBuf, String> {

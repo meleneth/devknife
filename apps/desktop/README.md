@@ -20,5 +20,6 @@ overwriting files that changed on disk. Writable source paths are confined to
 Desktop runs that request write-capable effects require explicit confirmation before execution.
 Completed runs open their trace automatically, with free-text filtering across event, effect, and
 payload details.
+Desktop runs persist the same `runs/<run_id>.trace.json` artifacts as CLI runs.
 
 On Linux, Tauri requires WebKit/GTK development packages. See `../../docs/008-devcontainer-and-tooling.md`.
