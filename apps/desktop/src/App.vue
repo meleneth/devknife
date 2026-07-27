@@ -5,6 +5,7 @@ import {
   AlertCircle,
   Boxes,
   CheckCircle2,
+  Code2,
   FileText,
   GitBranch,
   Play,
@@ -33,6 +34,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Textarea } from '@/components/ui/textarea'
 import {
   Tooltip,
   TooltipContent,
@@ -90,6 +92,7 @@ interface RunReport {
 const workflows = ref<WorkflowSummary[]>([])
 const selectedPath = ref('')
 const selectedPlan = ref<RunPlan | null>(null)
+const workflowSource = ref('')
 const runReport = ref<RunReport | null>(null)
 const loading = ref(false)
 const running = ref(false)
@@ -126,14 +129,18 @@ async function refreshWorkflows() {
 
   selectedPath.value = workflows.value[0]?.path ?? ''
   if (selectedPath.value) {
-    await loadPlan()
+    await loadWorkflow()
   }
 }
 
 async function selectWorkflow(path: string) {
   selectedPath.value = path
   runReport.value = null
-  await loadPlan()
+  await loadWorkflow()
+}
+
+async function loadWorkflow() {
+  await Promise.all([loadPlan(), loadSource()])
 }
 
 async function loadPlan() {
@@ -150,6 +157,18 @@ async function loadPlan() {
     error.value = `Unable to load plan from backend. ${String(cause)}`
   } finally {
     loading.value = false
+  }
+}
+
+async function loadSource() {
+  if (!selectedPath.value) return
+
+  try {
+    workflowSource.value = await invoke<string>('read_workflow_source', {
+      path: selectedPath.value,
+    })
+  } catch {
+    workflowSource.value = fallbackSource(selectedWorkflow.value)
   }
 }
 
@@ -273,6 +292,13 @@ function fallbackPlan(workflow: WorkflowSummary | undefined): RunPlan {
     ],
   }
 }
+
+function fallbackSource(workflow: WorkflowSummary | undefined) {
+  return `# Source preview is available in the Tauri desktop app.
+version: ${workflow?.version ?? 'devknife.workflow/v1alpha1'}
+name: ${workflow?.name ?? 'cross-protocol-smoke'}
+`
+}
 </script>
 
 <template>
@@ -381,6 +407,7 @@ function fallbackPlan(workflow: WorkflowSummary | undefined): RunPlan {
               <Tabs default-value="plan" class="w-full">
                 <TabsList class="mb-4 border-2 border-black bg-white shadow-[3px_3px_0_#000]">
                   <TabsTrigger value="plan">Plan</TabsTrigger>
+                  <TabsTrigger value="source">Source</TabsTrigger>
                   <TabsTrigger value="trace">Trace</TabsTrigger>
                   <TabsTrigger value="raw">Raw</TabsTrigger>
                 </TabsList>
@@ -439,6 +466,29 @@ function fallbackPlan(workflow: WorkflowSummary | undefined): RunPlan {
                           </TableRow>
                         </TableBody>
                       </Table>
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+
+                <TabsContent value="source">
+                  <Card class="border-4 border-black bg-white shadow-[6px_6px_0_#000]">
+                    <CardHeader>
+                      <CardTitle class="flex items-center gap-2 text-lg font-black">
+                        <Code2 class="size-5" />
+                        Workflow source
+                      </CardTitle>
+                      <CardDescription>
+                        Read-only YAML loaded from {{ selectedPath }}.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <Textarea
+                        :model-value="workflowSource"
+                        readonly
+                        spellcheck="false"
+                        aria-label="Workflow YAML source"
+                        class="min-h-[520px] resize-none border-2 border-black bg-neutral-950 p-4 font-mono text-xs leading-5 text-lime-200"
+                      />
                     </CardContent>
                   </Card>
                 </TabsContent>

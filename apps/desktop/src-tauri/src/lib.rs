@@ -62,6 +62,18 @@ fn plan_workflow_file(path: String) -> Result<RunPlan, String> {
 }
 
 #[tauri::command]
+fn read_workflow_source(path: String) -> Result<String, String> {
+    let root = repo_root()?;
+    let workflow_path = resolve_repo_path(&root, &path)?;
+    fs::read_to_string(&workflow_path).map_err(|error| {
+        format!(
+            "failed to read workflow source {}: {error}",
+            workflow_path.display()
+        )
+    })
+}
+
+#[tauri::command]
 fn run_workflow_file(path: String) -> Result<RunReport, String> {
     let root = repo_root()?;
     let workflow_path = resolve_repo_path(&root, &path)?;
@@ -87,6 +99,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             list_workflows,
             plan_workflow_file,
+            read_workflow_source,
             run_workflow_file
         ])
         .run(tauri::generate_context!())
