@@ -17,5 +17,6 @@ npm run dev:tauri
 The shell includes a workflow YAML editor with validation, guarded saving, and protection against
 overwriting files that changed on disk. Writable source paths are confined to
 `examples/workflows` by the Tauri backend.
+Desktop runs that request write-capable effects require explicit confirmation before execution.
 
 On Linux, Tauri requires WebKit/GTK development packages. See `../../docs/008-devcontainer-and-tooling.md`.

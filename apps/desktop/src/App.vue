@@ -240,6 +240,20 @@ function confirmDiscardChanges() {
 async function runSelectedWorkflow() {
   if (!selectedPath.value) return
 
+  if (!selectedPlan.value) {
+    await loadPlan()
+  }
+
+  const writeCapabilities = mutatingCapabilities.value
+  if (
+    writeCapabilities.length > 0 &&
+    !window.confirm(
+      `This run requests ${writeCapabilities.length} write-capable action${writeCapabilities.length === 1 ? '' : 's'}:\n\n${writeCapabilities.map((capability) => `• ${capability.id}`).join('\n')}\n\nRun this workflow?`,
+    )
+  ) {
+    return
+  }
+
   running.value = true
   error.value = ''
   try {

@@ -77,7 +77,7 @@ Implementation note: a first narrow GoAWS-backed adapter now exists for SNS publ
 - secret references and masking
 - dry-run where possible
 
-Implementation note: advisory run planning now exists in core and CLI. It reports effect order and required capabilities for local workflow actions, HTTP/GraphQL, SNS/SQS, and WebSocket effects. Capability enforcement remains future work.
+Implementation note: advisory run planning now exists in core and CLI. It reports effect order and required capabilities for local workflow actions, HTTP/GraphQL, SNS/SQS, and WebSocket effects. The desktop requires confirmation before running plans with write-capable effects; engine- and CLI-level capability enforcement remains future work.
 
 ## Phase 8: Desktop UI Exploration
 
