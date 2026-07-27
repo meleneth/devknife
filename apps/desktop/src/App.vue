@@ -59,6 +59,14 @@ interface WorkflowSummary {
   capabilityCount: number
 }
 
+interface EnvironmentSummary {
+  name: string
+  path: string
+  serviceCount: number
+  valueCount: number
+  secretCount: number
+}
+
 interface Capability {
   id: string
   risk: Risk
@@ -111,7 +119,9 @@ interface WorkflowValidation {
 }
 
 const workflows = ref<WorkflowSummary[]>([])
+const environments = ref<EnvironmentSummary[]>([])
 const selectedPath = ref('')
+const selectedEnvironmentPath = ref('')
 const selectedPlan = ref<RunPlan | null>(null)
 const workflowSource = ref('')
 const savedWorkflowSource = ref('')
@@ -128,6 +138,11 @@ const traceQuery = ref('')
 
 const selectedWorkflow = computed(() =>
   workflows.value.find((workflow) => workflow.path === selectedPath.value),
+)
+const selectedEnvironment = computed(() =>
+  environments.value.find(
+    (environment) => environment.path === selectedEnvironmentPath.value,
+  ),
 )
 
 const mutatingCapabilities = computed(
@@ -155,6 +170,7 @@ const sourceDirty = computed(
 onMounted(() => {
   window.addEventListener('beforeunload', preventUnsavedClose)
   void refreshWorkflows()
+  void refreshEnvironments()
   void refreshRunHistory()
 })
 
@@ -186,6 +202,17 @@ async function refreshWorkflows() {
   selectedPath.value = workflows.value[0]?.path ?? ''
   if (selectedPath.value) {
     await loadWorkflow()
+  }
+}
+
+async function refreshEnvironments() {
+  try {
+    environments.value =
+      await invoke<EnvironmentSummary[]>('list_environments')
+    selectedEnvironmentPath.value = environments.value[0]?.path ?? ''
+  } catch {
+    environments.value = []
+    selectedEnvironmentPath.value = ''
   }
 }
 
@@ -317,6 +344,7 @@ async function runSelectedWorkflow() {
   try {
     runReport.value = await invoke<RunReport>('run_workflow_file', {
       path: selectedPath.value,
+      environmentPath: selectedEnvironmentPath.value || null,
       allowedCapabilities: writeCapabilities.map(
         (capability) => capability.id,
       ),
@@ -798,6 +826,42 @@ name: ${workflow?.name ?? 'cross-protocol-smoke'}
             </div>
 
             <div class="space-y-4">
+              <Card class="border-4 border-black bg-[#6ee7f9] shadow-[6px_6px_0_#000]">
+                <CardHeader>
+                  <CardTitle class="text-lg font-black">Environment</CardTitle>
+                  <CardDescription class="text-neutral-800">
+                    Runtime bindings for the next run.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent class="space-y-3">
+                  <select
+                    v-model="selectedEnvironmentPath"
+                    aria-label="Runtime environment"
+                    class="h-10 w-full border-2 border-black bg-white px-3 text-sm font-bold"
+                  >
+                    <option value="">No environment</option>
+                    <option
+                      v-for="environment in environments"
+                      :key="environment.path"
+                      :value="environment.path"
+                    >
+                      {{ environment.name }}
+                    </option>
+                  </select>
+                  <p
+                    v-if="selectedEnvironment"
+                    class="font-mono text-xs font-semibold text-neutral-800"
+                  >
+                    {{ selectedEnvironment.serviceCount }} services ·
+                    {{ selectedEnvironment.valueCount }} values ·
+                    {{ selectedEnvironment.secretCount }} secret refs
+                  </p>
+                  <p class="text-xs font-semibold text-neutral-700">
+                    Secret values are never displayed here.
+                  </p>
+                </CardContent>
+              </Card>
+
               <Card class="border-4 border-black bg-[#d9f99d] shadow-[6px_6px_0_#000]">
                 <CardHeader>
                   <CardTitle class="text-lg font-black">Run status</CardTitle>

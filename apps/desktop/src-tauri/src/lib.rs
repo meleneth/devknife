@@ -25,6 +25,16 @@ struct WorkflowSummary {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+struct EnvironmentSummary {
+    name: String,
+    path: String,
+    service_count: usize,
+    value_count: usize,
+    secret_count: usize,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 struct RunSummary {
     run_id: String,
     workflow_name: String,
@@ -76,9 +86,46 @@ fn list_workflows() -> Result<Vec<WorkflowSummary>, String> {
 }
 
 #[tauri::command]
+fn list_environments() -> Result<Vec<EnvironmentSummary>, String> {
+    let root = repo_root()?;
+    let environment_dir = root.join("examples/environments");
+    if !environment_dir.exists() {
+        return Ok(Vec::new());
+    }
+
+    let mut environments = Vec::new();
+    for entry in fs::read_dir(&environment_dir)
+        .map_err(|error| format!("failed to read {}: {error}", environment_dir.display()))?
+    {
+        let entry = entry.map_err(|error| error.to_string())?;
+        let path = entry.path();
+        if path.extension().and_then(|value| value.to_str()) != Some("yaml") {
+            continue;
+        }
+
+        let environment = read_environment_file(&path)?;
+        environments.push(EnvironmentSummary {
+            name: environment.name.unwrap_or_else(|| {
+                path.file_stem()
+                    .and_then(|value| value.to_str())
+                    .unwrap_or("environment")
+                    .to_string()
+            }),
+            path: path_to_ui(&root, &path),
+            service_count: environment.services.len(),
+            value_count: environment.values.len(),
+            secret_count: environment.secret_refs.len(),
+        });
+    }
+
+    environments.sort_by(|left, right| left.name.cmp(&right.name));
+    Ok(environments)
+}
+
+#[tauri::command]
 fn plan_workflow_file(path: String) -> Result<RunPlan, String> {
     let root = repo_root()?;
-    let workflow_path = resolve_repo_path(&root, &path)?;
+    let workflow_path = resolve_workflow_path(&root, &path)?;
     let workflow = read_workflow(&workflow_path)?;
     Ok(plan_workflow(&workflow))
 }
@@ -152,11 +199,21 @@ fn save_workflow_source(
 }
 
 #[tauri::command]
-fn run_workflow_file(path: String, allowed_capabilities: Vec<String>) -> Result<RunReport, String> {
+fn run_workflow_file(
+    path: String,
+    environment_path: Option<String>,
+    allowed_capabilities: Vec<String>,
+) -> Result<RunReport, String> {
     let root = repo_root()?;
-    let workflow_path = resolve_repo_path(&root, &path)?;
+    let workflow_path = resolve_workflow_path(&root, &path)?;
     let workflow = read_workflow(&workflow_path)?;
-    let environment = read_environment(&root)?;
+    let environment = match environment_path {
+        Some(path) => {
+            let path = resolve_environment_path(&root, &path)?;
+            read_environment_file(&path)?
+        }
+        None => RuntimeEnvironment::default(),
+    };
     let report = Runner::with_environment_and_policy(
         ExecutionLimits::default(),
         environment,
@@ -252,6 +309,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             list_workflows,
+            list_environments,
             plan_workflow_file,
             read_workflow_source,
             save_workflow_source,
@@ -270,13 +328,8 @@ fn read_workflow(path: &Path) -> Result<devknife_core::Workflow, String> {
     load_workflow_yaml(&contents).map_err(|error| error.to_string())
 }
 
-fn read_environment(root: &Path) -> Result<RuntimeEnvironment, String> {
-    let path = root.join("examples/environments/local.yaml");
-    if !path.exists() {
-        return Ok(RuntimeEnvironment::default());
-    }
-
-    let contents = fs::read_to_string(&path)
+fn read_environment_file(path: &Path) -> Result<RuntimeEnvironment, String> {
+    let contents = fs::read_to_string(path)
         .map_err(|error| format!("failed to read environment {}: {error}", path.display()))?;
     load_environment_yaml(&contents).map_err(|error| error.to_string())
 }
@@ -433,6 +486,22 @@ fn resolve_workflow_path(root: &Path, path: &str) -> Result<PathBuf, String> {
         || candidate.extension().and_then(|value| value.to_str()) != Some("yaml")
     {
         return Err("workflow source path must be a YAML file in examples/workflows".to_string());
+    }
+
+    Ok(candidate)
+}
+
+fn resolve_environment_path(root: &Path, path: &str) -> Result<PathBuf, String> {
+    let candidate = resolve_repo_path(root, path)?;
+    let environment_dir = root
+        .join("examples/environments")
+        .canonicalize()
+        .map_err(|error| format!("failed to resolve environment directory: {error}"))?;
+
+    if !candidate.starts_with(&environment_dir)
+        || candidate.extension().and_then(|value| value.to_str()) != Some("yaml")
+    {
+        return Err("environment path must be a YAML file in examples/environments".to_string());
     }
 
     Ok(candidate)
