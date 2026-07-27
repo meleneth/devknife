@@ -327,6 +327,34 @@ handlers:
 }
 
 #[test]
+fn workflow_loader_rejects_empty_and_duplicate_seed_ids() {
+    let empty = devknife_core::load_workflow_yaml(
+        r#"
+name: empty-seed-id
+seed_events:
+  - id: ""
+    type: workflow.started
+"#,
+    )
+    .expect_err("empty seed id must fail")
+    .to_string();
+    assert!(empty.contains("seed_events[0].id is required"));
+
+    let duplicate = devknife_core::load_workflow_yaml(
+        r#"
+name: duplicate-seed-id
+seed_events:
+  - id: seed-2
+    type: first.started
+  - type: second.started
+"#,
+    )
+    .expect_err("generated and explicit duplicate ids must fail")
+    .to_string();
+    assert!(duplicate.contains("seed event id 'seed-2' is duplicated"));
+}
+
+#[test]
 fn environment_loader_rejects_unknown_fields() {
     let unknown_section = devknife_core::load_environment_yaml(
         r#"

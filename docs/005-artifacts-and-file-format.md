@@ -108,3 +108,5 @@ environment values, and secret references. CLI and desktop runs perform this bin
 before executing effects.
 Workflow validation rejects unbalanced or unsupported template expressions. The supported
 namespaces are `event.payload.*`, `env.*`, and `secret.*`.
+Seed event IDs must be non-empty and unique after default IDs are assigned, preserving unambiguous
+causal trace links.

@@ -158,7 +158,19 @@ pub fn validate_workflow(workflow: &Workflow) -> Result<(), LoadError> {
     let document = serde_json::to_value(workflow).expect("workflow serializes");
     validate_template_expressions(&document)?;
 
+    let mut seed_ids = BTreeSet::new();
     for (index, event) in workflow.seed_events.iter().enumerate() {
+        if event.id.trim().is_empty() {
+            return Err(LoadError::Validation(format!(
+                "seed_events[{index}].id is required when provided"
+            )));
+        }
+        if !seed_ids.insert(event.id.as_str()) {
+            return Err(LoadError::Validation(format!(
+                "seed event id '{}' is duplicated",
+                event.id
+            )));
+        }
         if event.event_type.trim().is_empty() {
             return Err(LoadError::Validation(format!(
                 "seed_events[{index}].type is required"
