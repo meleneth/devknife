@@ -343,6 +343,9 @@ function discardSourceChanges() {
 function markSourceChanged() {
   sourceStatus.value = ''
   sourceValidation.value = null
+  selectedPlan.value = null
+  plannedWorkflowPath.value = ''
+  plannedEnvironmentPath.value = ''
 }
 
 function confirmDiscardChanges() {

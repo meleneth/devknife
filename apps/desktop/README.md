@@ -32,6 +32,6 @@ value, and secret-reference counts. Changing it also preflights the visible run 
 bindings. Runs remain disabled until that backend plan succeeds for the currently selected workflow
 and environment; failed preflights do not display synthetic fallback plan data.
 Unsaved editor changes invalidate that plan until the workflow is saved, validated, and planned
-again.
+again, and stale plan details are cleared from the UI immediately.
 
 On Linux, Tauri requires WebKit/GTK development packages. See `../../docs/008-devcontainer-and-tooling.md`.
