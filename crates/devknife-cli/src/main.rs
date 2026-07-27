@@ -77,6 +77,10 @@ fn main() -> Result<()> {
             let workflow = read_workflow(workflow)?;
             let plan = plan_workflow(&workflow);
             if dry_run {
+                if let Some(environment) = environment {
+                    let environment = read_environment(Some(environment))?;
+                    validate_workflow_environment(&workflow, &environment)?;
+                }
                 if json {
                     println!("{}", serde_json::to_string_pretty(&plan)?);
                 } else {

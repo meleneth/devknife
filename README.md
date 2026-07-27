@@ -75,8 +75,8 @@ on both Linux and Windows.
 Write-capable effects are denied by default. Approve exact capabilities with repeatable
 `--allow-capability <capability>` flags, or use `--allow-write` to approve every write capability
 listed by the run plan.
-`--dry-run` prints that plan without loading the runtime environment, executing effects, or
-writing a trace artifact.
+`--dry-run` prints that plan without executing effects or writing a trace artifact. When paired
+with `--environment`, it loads that environment and preflights the workflow's bindings first.
 Workflow runs preflight named services plus `{{ env.name }}` and `{{ secret.name }}` references
 before executing effects. Pass `--environment` to `validate` to run the same binding check without
 execution, or to `plan` to check bindings before printing the plan.
