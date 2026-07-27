@@ -102,6 +102,14 @@ interface RunSummary {
   modifiedAtUnixMs: number
 }
 
+interface WorkflowValidation {
+  valid: boolean
+  kind: 'syntax' | 'semantic' | null
+  message: string
+  line: number | null
+  column: number | null
+}
+
 const workflows = ref<WorkflowSummary[]>([])
 const selectedPath = ref('')
 const selectedPlan = ref<RunPlan | null>(null)
@@ -114,6 +122,7 @@ const running = ref(false)
 const saving = ref(false)
 const error = ref('')
 const sourceStatus = ref('')
+const sourceValidation = ref<WorkflowValidation | null>(null)
 const activeTab = ref('plan')
 const traceQuery = ref('')
 
@@ -208,6 +217,7 @@ async function loadSource() {
     })
     savedWorkflowSource.value = workflowSource.value
     sourceStatus.value = ''
+    sourceValidation.value = null
   } catch {
     workflowSource.value = fallbackSource(selectedWorkflow.value)
     savedWorkflowSource.value = workflowSource.value
@@ -216,13 +226,14 @@ async function loadSource() {
 
 async function validateSource() {
   sourceStatus.value = ''
+  sourceValidation.value = null
   error.value = ''
   try {
-    await invoke<void>('validate_workflow_source', {
+    const result = await invoke<WorkflowValidation>('validate_workflow_source', {
       source: workflowSource.value,
     })
-    sourceStatus.value = 'Workflow is valid.'
-    return true
+    sourceValidation.value = result
+    return result.valid
   } catch (cause) {
     error.value = `Workflow validation failed. ${String(cause)}`
     return false
@@ -232,8 +243,9 @@ async function validateSource() {
 async function saveSource() {
   if (!selectedPath.value || !sourceDirty.value) return
 
+  if (!(await validateSource())) return
+
   saving.value = true
-  sourceStatus.value = ''
   error.value = ''
   try {
     await invoke<void>('save_workflow_source', {
@@ -243,6 +255,7 @@ async function saveSource() {
     })
     savedWorkflowSource.value = workflowSource.value
     sourceStatus.value = 'Saved and validated.'
+    sourceValidation.value = null
     await loadPlan()
   } catch (cause) {
     error.value = `Unable to save workflow. ${String(cause)}`
@@ -254,7 +267,13 @@ async function saveSource() {
 function discardSourceChanges() {
   workflowSource.value = savedWorkflowSource.value
   sourceStatus.value = ''
+  sourceValidation.value = null
   error.value = ''
+}
+
+function markSourceChanged() {
+  sourceStatus.value = ''
+  sourceValidation.value = null
 }
 
 function confirmDiscardChanges() {
@@ -647,11 +666,27 @@ name: ${workflow?.name ?? 'cross-protocol-smoke'}
                       >
                         {{ sourceStatus }}
                       </div>
+                      <div
+                        v-if="sourceValidation"
+                        class="mb-3 border-2 border-black px-3 py-2 text-sm font-bold"
+                        :class="sourceValidation.valid ? 'bg-[#d9f99d]' : 'bg-[#ffde59]'"
+                      >
+                        <p>
+                          {{ sourceValidation.valid ? sourceValidation.message : `${sourceValidation.kind} error: ${sourceValidation.message}` }}
+                        </p>
+                        <p
+                          v-if="sourceValidation.line !== null"
+                          class="mt-1 font-mono text-xs font-semibold"
+                        >
+                          Line {{ sourceValidation.line }}, column {{ sourceValidation.column }}
+                        </p>
+                      </div>
                       <Textarea
                         v-model="workflowSource"
                         spellcheck="false"
                         aria-label="Workflow YAML source"
                         class="min-h-[520px] resize-none border-2 border-black bg-neutral-950 p-4 font-mono text-xs leading-5 text-lime-200"
+                        @update:model-value="markSourceChanged"
                       />
                     </CardContent>
                   </Card>

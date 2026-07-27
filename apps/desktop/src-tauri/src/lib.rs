@@ -4,8 +4,8 @@ use std::{
 };
 
 use devknife_core::{
-    load_environment_yaml, load_workflow_yaml, plan_workflow, ExecutionLimits, RunPlan, RunReport,
-    Runner, RuntimeEnvironment,
+    load_environment_yaml, load_workflow_yaml, plan_workflow, ExecutionLimits, LoadError, RunPlan,
+    RunReport, Runner, RuntimeEnvironment,
 };
 use serde::Serialize;
 
@@ -29,6 +29,16 @@ struct RunSummary {
     status: devknife_core::RunStatus,
     trace_entry_count: usize,
     modified_at_unix_ms: u128,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WorkflowValidation {
+    valid: bool,
+    kind: Option<&'static str>,
+    message: String,
+    line: Option<usize>,
+    column: Option<usize>,
 }
 
 #[tauri::command]
@@ -84,10 +94,33 @@ fn read_workflow_source(path: String) -> Result<String, String> {
 }
 
 #[tauri::command]
-fn validate_workflow_source(source: String) -> Result<(), String> {
-    load_workflow_yaml(&source)
-        .map(|_| ())
-        .map_err(|error| error.to_string())
+fn validate_workflow_source(source: String) -> WorkflowValidation {
+    match load_workflow_yaml(&source) {
+        Ok(_) => WorkflowValidation {
+            valid: true,
+            kind: None,
+            message: "Workflow is valid.".to_string(),
+            line: None,
+            column: None,
+        },
+        Err(LoadError::Parse(error)) => {
+            let location = error.location();
+            WorkflowValidation {
+                valid: false,
+                kind: Some("syntax"),
+                message: error.to_string(),
+                line: location.map(|value| value.line()),
+                column: location.map(|value| value.column()),
+            }
+        }
+        Err(LoadError::Validation(message)) => WorkflowValidation {
+            valid: false,
+            kind: Some("semantic"),
+            message,
+            line: None,
+            column: None,
+        },
+    }
 }
 
 #[tauri::command]
@@ -313,4 +346,29 @@ fn path_to_ui(root: &Path, path: &Path) -> String {
         .unwrap_or(path)
         .to_string_lossy()
         .to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::validate_workflow_source;
+
+    #[test]
+    fn workflow_validation_reports_yaml_locations() {
+        let result = validate_workflow_source("name: [".to_string());
+
+        assert!(!result.valid);
+        assert_eq!(result.kind, Some("syntax"));
+        assert!(result.line.is_some());
+        assert!(result.column.is_some());
+    }
+
+    #[test]
+    fn workflow_validation_distinguishes_semantic_errors() {
+        let result = validate_workflow_source("name: ''".to_string());
+
+        assert!(!result.valid);
+        assert_eq!(result.kind, Some("semantic"));
+        assert!(result.message.contains("workflow name is required"));
+        assert_eq!(result.line, None);
+    }
 }
