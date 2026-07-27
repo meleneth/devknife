@@ -280,6 +280,34 @@ handlers:
 }
 
 #[test]
+fn environment_loader_rejects_unknown_fields() {
+    let unknown_section = devknife_core::load_environment_yaml(
+        r#"
+name: local
+valuez:
+  region: us-east-1
+"#,
+    );
+    assert!(unknown_section
+        .expect_err("unknown environment section must fail")
+        .to_string()
+        .contains("unknown field `valuez`"));
+
+    let unknown_binding = devknife_core::load_environment_yaml(
+        r#"
+services:
+  rest:
+    base_url: http://localhost:18101
+    timeout: 10
+"#,
+    );
+    assert!(unknown_binding
+        .expect_err("unknown service binding field must fail")
+        .to_string()
+        .contains("unknown field `timeout`"));
+}
+
+#[test]
 fn workflow_plan_lists_required_capabilities_and_effect_order() {
     let workflow = devknife_core::load_workflow_yaml(
         r#"
