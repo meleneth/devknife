@@ -135,6 +135,9 @@ const sourceStatus = ref('')
 const sourceValidation = ref<WorkflowValidation | null>(null)
 const activeTab = ref('plan')
 const traceQuery = ref('')
+const plannedWorkflowPath = ref('')
+const plannedEnvironmentPath = ref('')
+let planRequestId = 0
 
 const selectedWorkflow = computed(() =>
   workflows.value.find((workflow) => workflow.path === selectedPath.value),
@@ -143,6 +146,12 @@ const selectedEnvironment = computed(() =>
   environments.value.find(
     (environment) => environment.path === selectedEnvironmentPath.value,
   ),
+)
+const planReady = computed(
+  () =>
+    selectedPlan.value !== null &&
+    plannedWorkflowPath.value === selectedPath.value &&
+    plannedEnvironmentPath.value === selectedEnvironmentPath.value,
 )
 
 const mutatingCapabilities = computed(
@@ -239,18 +248,32 @@ async function loadWorkflow() {
 async function loadPlan() {
   if (!selectedPath.value) return
 
+  const requestId = ++planRequestId
+  const workflowPath = selectedPath.value
+  const environmentPath = selectedEnvironmentPath.value
+  plannedWorkflowPath.value = ''
+  plannedEnvironmentPath.value = ''
   loading.value = true
   error.value = ''
   try {
-    selectedPlan.value = await invoke<RunPlan>('plan_workflow_file', {
-      path: selectedPath.value,
-      environmentPath: selectedEnvironmentPath.value || null,
+    const plan = await invoke<RunPlan>('plan_workflow_file', {
+      path: workflowPath,
+      environmentPath: environmentPath || null,
     })
+    if (requestId !== planRequestId) return
+
+    selectedPlan.value = plan
+    plannedWorkflowPath.value = workflowPath
+    plannedEnvironmentPath.value = environmentPath
   } catch (cause) {
+    if (requestId !== planRequestId) return
+
     selectedPlan.value = fallbackPlan(selectedWorkflow.value)
     error.value = `Unable to load plan from backend. ${String(cause)}`
   } finally {
-    loading.value = false
+    if (requestId === planRequestId) {
+      loading.value = false
+    }
   }
 }
 
@@ -335,6 +358,7 @@ async function runSelectedWorkflow() {
   if (!selectedPlan.value) {
     await loadPlan()
   }
+  if (!planReady.value) return
 
   const writeCapabilities = mutatingCapabilities.value
   if (
@@ -581,7 +605,7 @@ name: ${workflow?.name ?? 'cross-protocol-smoke'}
               </Button>
               <Button
                 class="border-2 border-black bg-[#ff5c8a] text-black shadow-[3px_3px_0_#000] hover:bg-[#ff7aa0]"
-                :disabled="running || !selectedPath"
+                :disabled="running || loading || !selectedPath || !planReady"
                 @click="runSelectedWorkflow"
               >
                 <Play class="size-4" />
