@@ -129,6 +129,7 @@ const runReport = ref<RunReport | null>(null)
 const runHistory = ref<RunSummary[]>([])
 const loading = ref(false)
 const sourceLoading = ref(false)
+const validating = ref(false)
 const running = ref(false)
 const saving = ref(false)
 const error = ref('')
@@ -141,6 +142,7 @@ const plannedWorkflowPath = ref('')
 const plannedEnvironmentPath = ref('')
 let planRequestId = 0
 let sourceRequestId = 0
+let validationRequestId = 0
 let loadingOperationCount = 0
 
 const selectedWorkflow = computed(() =>
@@ -309,6 +311,8 @@ async function loadSource() {
   if (!selectedPath.value) return
 
   const requestId = ++sourceRequestId
+  validationRequestId += 1
+  validating.value = false
   const workflowPath = selectedPath.value
   sourceLoading.value = true
   workflowSource.value = ''
@@ -337,18 +341,36 @@ async function loadSource() {
 }
 
 async function validateSource() {
+  const requestId = ++validationRequestId
+  const workflowPath = selectedPath.value
+  const source = workflowSource.value
+  validating.value = true
   sourceStatus.value = ''
   sourceValidation.value = null
   error.value = ''
   try {
     const result = await invoke<WorkflowValidation>('validate_workflow_source', {
-      source: workflowSource.value,
+      source,
     })
+    if (
+      requestId !== validationRequestId ||
+      selectedPath.value !== workflowPath ||
+      workflowSource.value !== source
+    ) {
+      return false
+    }
+
     sourceValidation.value = result
     return result.valid
   } catch (cause) {
+    if (requestId !== validationRequestId) return false
+
     error.value = `Workflow validation failed. ${String(cause)}`
     return false
+  } finally {
+    if (requestId === validationRequestId) {
+      validating.value = false
+    }
   }
 }
 
@@ -357,19 +379,36 @@ async function saveSource() {
 
   if (!(await validateSource())) return
 
+  const workflowPath = selectedPath.value
+  const source = workflowSource.value
+  const expectedSource = savedWorkflowSource.value
   saving.value = true
   error.value = ''
   try {
     await invoke<void>('save_workflow_source', {
-      path: selectedPath.value,
-      source: workflowSource.value,
-      expectedSource: savedWorkflowSource.value,
+      path: workflowPath,
+      source,
+      expectedSource,
     })
-    savedWorkflowSource.value = workflowSource.value
+    if (
+      selectedPath.value !== workflowPath ||
+      workflowSource.value !== source
+    ) {
+      return
+    }
+
+    savedWorkflowSource.value = source
     sourceStatus.value = 'Saved and validated.'
     sourceValidation.value = null
     await loadPlan()
   } catch (cause) {
+    if (
+      selectedPath.value !== workflowPath ||
+      workflowSource.value !== source
+    ) {
+      return
+    }
+
     error.value = `Unable to save workflow. ${String(cause)}`
   } finally {
     saving.value = false
@@ -384,6 +423,8 @@ function discardSourceChanges() {
 }
 
 function markSourceChanged() {
+  validationRequestId += 1
+  validating.value = false
   sourceStatus.value = ''
   sourceValidation.value = null
   selectedPlan.value = null
@@ -534,6 +575,7 @@ function traceDetail(entry: TraceEntry) {
                 :key="workflow.path"
                 class="mb-3 w-full border-2 border-black bg-white p-3 text-left shadow-[4px_4px_0_#000] transition-transform hover:-translate-y-0.5"
                 :class="workflow.path === selectedPath ? 'bg-[#d9f99d]' : ''"
+                :disabled="loading || validating || saving"
                 @click="selectWorkflow(workflow.path)"
               >
                 <div class="mb-2 flex items-start justify-between gap-2">
@@ -682,7 +724,12 @@ function traceDetail(entry: TraceEntry) {
                           <Button
                             variant="outline"
                             class="border-2 border-black bg-white text-black shadow-[2px_2px_0_#000]"
-                            :disabled="saving || sourceLoading || !sourceDirty"
+                            :disabled="
+                              saving ||
+                              validating ||
+                              sourceLoading ||
+                              !sourceDirty
+                            "
                             @click="discardSourceChanges"
                           >
                             <RotateCcw class="size-4" />
@@ -691,15 +738,25 @@ function traceDetail(entry: TraceEntry) {
                           <Button
                             variant="outline"
                             class="border-2 border-black bg-[#6ee7f9] text-black shadow-[2px_2px_0_#000]"
-                            :disabled="saving || sourceLoading || !workflowSource"
+                            :disabled="
+                              saving ||
+                              validating ||
+                              sourceLoading ||
+                              !workflowSource
+                            "
                             @click="validateSource"
                           >
                             <ShieldCheck class="size-4" />
-                            Validate
+                            {{ validating ? 'Validating…' : 'Validate' }}
                           </Button>
                           <Button
                             class="border-2 border-black bg-[#ff5c8a] text-black shadow-[2px_2px_0_#000]"
-                            :disabled="saving || sourceLoading || !sourceDirty"
+                            :disabled="
+                              saving ||
+                              validating ||
+                              sourceLoading ||
+                              !sourceDirty
+                            "
                             @click="saveSource"
                           >
                             <Save class="size-4" />
@@ -735,7 +792,7 @@ function traceDetail(entry: TraceEntry) {
                         spellcheck="false"
                         aria-label="Workflow YAML source"
                         class="min-h-[520px] resize-none border-2 border-black bg-neutral-950 p-4 font-mono text-xs leading-5 text-lime-200"
-                        :disabled="sourceLoading || saving"
+                        :disabled="sourceLoading || validating || saving"
                         @update:model-value="markSourceChanged"
                       />
                     </CardContent>

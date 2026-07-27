@@ -40,5 +40,7 @@ Environment discovery failures are shown beside the selector instead of silently
 empty environment list.
 Workflow source reads ignore stale responses from earlier selections and lock the editor until the
 current file finishes loading.
+Validation and saving operate on an exact source snapshot; editing or switching workflows cannot
+apply a stale validation result to different content.
 
 On Linux, Tauri requires WebKit/GTK development packages. See `../../docs/008-devcontainer-and-tooling.md`.
