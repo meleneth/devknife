@@ -99,6 +99,10 @@ Implementation note: an initial desktop shell now exists in `apps/desktop`. It l
 - causal trace sufficient for failure diagnosis
 - Linux and Windows validation path
 
+Implementation note: GitHub Actions now runs Rust formatting, Clippy, workspace tests, and the Vue
+production build on Linux and Windows. Native package generation and interactive desktop smoke
+testing remain release-stage checks.
+
 ## Phase 1 Implementation Note
 
 The first implementation pass started Phase 1 with a synchronous in-memory engine, typed causal trace, YAML bootstrap workflow loading, and CLI `run`/`validate` commands. The local protocol testbed was also added early so REST, GraphQL, SQS, and WebSocket adapter work had deterministic fixtures.

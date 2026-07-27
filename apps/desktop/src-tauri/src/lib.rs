@@ -213,7 +213,7 @@ fn list_run_reports() -> Result<Vec<RunSummary>, String> {
         })
         .collect::<Vec<_>>();
 
-    reports.sort_by(|left, right| right.modified_at_unix_ms.cmp(&left.modified_at_unix_ms));
+    reports.sort_by_key(|report| std::cmp::Reverse(report.modified_at_unix_ms));
     reports.truncate(20);
     Ok(reports)
 }

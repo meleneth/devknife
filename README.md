@@ -63,6 +63,9 @@ Useful commands:
 - `npm --prefix apps/desktop run dev:tauri`
 - `docker compose -f testbed/docker-compose.yml config`
 
+GitHub Actions validates formatting, Clippy, the full Rust workspace, and the Vue production build
+on both Linux and Windows.
+
 `run` writes a stable JSON trace artifact to `runs/<run_id>.trace.json` by default. Use `--trace-dir <dir>` to choose another directory or `--no-trace-file` for stdout-only runs.
 Write-capable effects are denied by default. Approve exact capabilities with repeatable
 `--allow-capability <capability>` flags, or use `--allow-write` to approve every write capability
