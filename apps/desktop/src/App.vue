@@ -147,13 +147,6 @@ const selectedEnvironment = computed(() =>
     (environment) => environment.path === selectedEnvironmentPath.value,
   ),
 )
-const planReady = computed(
-  () =>
-    selectedPlan.value !== null &&
-    plannedWorkflowPath.value === selectedPath.value &&
-    plannedEnvironmentPath.value === selectedEnvironmentPath.value,
-)
-
 const mutatingCapabilities = computed(
   () =>
     selectedPlan.value?.required_capabilities.filter(
@@ -174,6 +167,13 @@ const traceRows = computed(() => {
 })
 const sourceDirty = computed(
   () => workflowSource.value !== savedWorkflowSource.value,
+)
+const planReady = computed(
+  () =>
+    !sourceDirty.value &&
+    selectedPlan.value !== null &&
+    plannedWorkflowPath.value === selectedPath.value &&
+    plannedEnvironmentPath.value === selectedEnvironmentPath.value,
 )
 
 onMounted(() => {
@@ -355,6 +355,10 @@ function confirmDiscardChanges() {
 async function runSelectedWorkflow() {
   if (!selectedPath.value) return
 
+  if (sourceDirty.value) {
+    error.value = 'Save and validate workflow changes before running.'
+    return
+  }
   if (!selectedPlan.value) {
     await loadPlan()
   }
@@ -540,7 +544,7 @@ name: ${workflow?.name ?? 'cross-protocol-smoke'}
               <Button
                 variant="outline"
                 class="border-2 border-black bg-[#6ee7f9] text-black shadow-[3px_3px_0_#000]"
-                :disabled="loading || !selectedPath"
+                :disabled="loading || !selectedPath || sourceDirty"
                 @click="loadPlan"
               >
                 <Route class="size-4" />
