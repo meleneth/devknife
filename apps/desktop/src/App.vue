@@ -132,10 +132,13 @@ const sourceLoading = ref(false)
 const validating = ref(false)
 const running = ref(false)
 const saving = ref(false)
+const runHistoryRefreshing = ref(false)
+const runReportLoading = ref(false)
 const error = ref('')
 const sourceStatus = ref('')
 const sourceValidation = ref<WorkflowValidation | null>(null)
 const environmentError = ref('')
+const runHistoryError = ref('')
 const activeTab = ref('plan')
 const traceQuery = ref('')
 const plannedWorkflowPath = ref('')
@@ -144,6 +147,8 @@ let planRequestId = 0
 let sourceRequestId = 0
 let validationRequestId = 0
 let runRequestId = 0
+let runHistoryRequestId = 0
+let runReportRequestId = 0
 let loadingOperationCount = 0
 
 const selectedWorkflow = computed(() =>
@@ -504,21 +509,45 @@ async function runSelectedWorkflow() {
 }
 
 async function refreshRunHistory() {
+  const requestId = ++runHistoryRequestId
+  runHistoryRefreshing.value = true
+  runHistoryError.value = ''
   try {
-    runHistory.value = await invoke<RunSummary[]>('list_run_reports')
-  } catch {
+    const history = await invoke<RunSummary[]>('list_run_reports')
+    if (requestId !== runHistoryRequestId) return
+
+    runHistory.value = history
+  } catch (cause) {
+    if (requestId !== runHistoryRequestId) return
+
     runHistory.value = []
+    runHistoryError.value = `Unable to load run history. ${String(cause)}`
+  } finally {
+    if (requestId === runHistoryRequestId) {
+      runHistoryRefreshing.value = false
+    }
   }
 }
 
 async function loadRunReport(runId: string) {
+  const requestId = ++runReportRequestId
+  runReportLoading.value = true
   error.value = ''
   try {
-    runReport.value = await invoke<RunReport>('read_run_report', { runId })
+    const report = await invoke<RunReport>('read_run_report', { runId })
+    if (requestId !== runReportRequestId) return
+
+    runReport.value = report
     traceQuery.value = ''
     activeTab.value = 'trace'
   } catch (cause) {
+    if (requestId !== runReportRequestId) return
+
     error.value = `Unable to load run report. ${String(cause)}`
+  } finally {
+    if (requestId === runReportRequestId) {
+      runReportLoading.value = false
+    }
   }
 }
 
@@ -1045,11 +1074,32 @@ function traceDetail(entry: TraceEntry) {
                 </CardHeader>
                 <CardContent>
                   <div class="space-y-2">
+                    <div
+                      v-if="runHistoryError"
+                      class="border-2 border-black bg-[#fecaca] p-2 text-xs font-bold"
+                    >
+                      <div class="mb-2 flex items-start gap-2">
+                        <AlertCircle class="mt-0.5 size-4 shrink-0" />
+                        <span>{{ runHistoryError }}</span>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        class="border-2 border-black bg-white"
+                        :disabled="runHistoryRefreshing || running"
+                        @click="refreshRunHistory"
+                      >
+                        <RefreshCw class="size-3" />
+                        Retry
+                      </Button>
+                    </div>
                     <button
                       v-for="run in runHistory"
                       :key="run.runId"
                       class="w-full border-2 border-black bg-[#fffdf4] p-3 text-left hover:bg-[#d9f99d]"
-                      :disabled="running"
+                      :disabled="
+                        running || runHistoryRefreshing || runReportLoading
+                      "
                       @click="loadRunReport(run.runId)"
                     >
                       <div class="flex items-center justify-between gap-2">
@@ -1065,7 +1115,18 @@ function traceDetail(entry: TraceEntry) {
                         {{ run.runId }} · {{ run.traceEntryCount }} entries
                       </p>
                     </button>
-                    <p v-if="runHistory.length === 0" class="text-sm text-neutral-700">
+                    <p
+                      v-if="runHistoryRefreshing"
+                      class="text-sm text-neutral-700"
+                    >
+                      Loading persisted runs…
+                    </p>
+                    <p
+                      v-else-if="
+                        runHistory.length === 0 && !runHistoryError
+                      "
+                      class="text-sm text-neutral-700"
+                    >
                       No persisted runs yet.
                     </p>
                   </div>

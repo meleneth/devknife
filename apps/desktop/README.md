@@ -44,5 +44,7 @@ Validation and saving operate on an exact source snapshot; editing or switching 
 apply a stale validation result to different content.
 Active runs lock workflow, environment, source, and history selection; returned reports are applied
 only to the exact workflow/environment request that produced them.
+Persisted history and report reads use latest-request-wins ordering, and history failures include an
+inline retry instead of silently appearing empty.
 
 On Linux, Tauri requires WebKit/GTK development packages. See `../../docs/008-devcontainer-and-tooling.md`.
