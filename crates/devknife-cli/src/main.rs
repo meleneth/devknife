@@ -141,10 +141,16 @@ fn main() -> Result<()> {
 }
 
 fn read_environment(path: Option<PathBuf>) -> Result<devknife_core::RuntimeEnvironment> {
-    let path = path.unwrap_or_else(|| PathBuf::from("examples/environments/local.yaml"));
-    if !path.exists() {
-        return Ok(devknife_core::RuntimeEnvironment::default());
-    }
+    let path = match path {
+        Some(path) => path,
+        None => {
+            let default_path = PathBuf::from("examples/environments/local.yaml");
+            if !default_path.exists() {
+                return Ok(devknife_core::RuntimeEnvironment::default());
+            }
+            default_path
+        }
+    };
 
     let contents = fs::read_to_string(&path)
         .with_context(|| format!("failed to read environment file {}", path.display()))?;
@@ -446,7 +452,7 @@ fn emitted_suffix(events: &[devknife_core::Event]) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{Cli, Command};
+    use super::{read_environment, Cli, Command};
     use clap::Parser;
     use std::path::Path;
 
@@ -486,5 +492,17 @@ mod tests {
                 ..
             } if allow_capability == ["network.graphql", "network.websocket"]
         ));
+    }
+
+    #[test]
+    fn explicit_missing_environment_is_an_error() {
+        let path = std::env::temp_dir().join(format!(
+            "devknife-environment-that-does-not-exist-{}",
+            std::process::id()
+        ));
+
+        let error = read_environment(Some(path.clone())).expect_err("missing file must fail");
+
+        assert!(error.to_string().contains(&path.display().to_string()));
     }
 }
