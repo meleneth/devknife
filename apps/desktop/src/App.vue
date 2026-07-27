@@ -114,6 +114,11 @@ interface RunSummary {
   modifiedAtUnixMs: number
 }
 
+interface RunReportList {
+  reports: RunSummary[]
+  warnings: string[]
+}
+
 interface WorkflowValidation {
   valid: boolean
   kind: 'syntax' | 'semantic' | null
@@ -143,6 +148,7 @@ const sourceStatus = ref('')
 const sourceValidation = ref<WorkflowValidation | null>(null)
 const environmentError = ref('')
 const runHistoryError = ref('')
+const runHistoryWarnings = ref<string[]>([])
 const activeTab = ref('plan')
 const traceQuery = ref('')
 const plannedWorkflowPath = ref('')
@@ -520,15 +526,18 @@ async function refreshRunHistory() {
   const requestId = ++runHistoryRequestId
   runHistoryRefreshing.value = true
   runHistoryError.value = ''
+  runHistoryWarnings.value = []
   try {
-    const history = await invoke<RunSummary[]>('list_run_reports')
+    const result = await invoke<RunReportList>('list_run_reports')
     if (requestId !== runHistoryRequestId) return
 
-    runHistory.value = history
+    runHistory.value = result.reports
+    runHistoryWarnings.value = result.warnings
   } catch (cause) {
     if (requestId !== runHistoryRequestId) return
 
     runHistory.value = []
+    runHistoryWarnings.value = []
     runHistoryError.value = `Unable to load run history. ${String(cause)}`
   } finally {
     if (requestId === runHistoryRequestId) {
@@ -1119,6 +1128,26 @@ function traceDetail(entry: TraceEntry) {
                         <RefreshCw class="size-3" />
                         Retry
                       </Button>
+                    </div>
+                    <div
+                      v-if="runHistoryWarnings.length > 0"
+                      class="border-2 border-black bg-[#ffde59] p-2 text-xs font-bold"
+                    >
+                      <div class="mb-1 flex items-start gap-2">
+                        <AlertCircle class="mt-0.5 size-4 shrink-0" />
+                        <span>
+                          {{ runHistoryWarnings.length }} persisted report
+                          {{ runHistoryWarnings.length === 1 ? 'warning' : 'warnings' }}
+                        </span>
+                      </div>
+                      <ul class="list-disc space-y-1 pl-5 font-mono text-[11px]">
+                        <li
+                          v-for="warning in runHistoryWarnings"
+                          :key="warning"
+                        >
+                          {{ warning }}
+                        </li>
+                      </ul>
                     </div>
                     <button
                       v-for="run in runHistory"

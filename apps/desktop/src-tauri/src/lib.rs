@@ -49,6 +49,13 @@ struct RunSummary {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+struct RunReportList {
+    reports: Vec<RunSummary>,
+    warnings: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 struct WorkflowValidation {
     valid: bool,
     kind: Option<&'static str>,
@@ -215,53 +222,50 @@ fn run_workflow_file(
 }
 
 #[tauri::command]
-fn list_run_reports() -> Result<Vec<RunSummary>, String> {
+fn list_run_reports() -> Result<RunReportList, String> {
     let root = repo_root()?;
     let run_dir = root.join("runs");
     if !run_dir.exists() {
-        return Ok(Vec::new());
+        return Ok(RunReportList {
+            reports: Vec::new(),
+            warnings: Vec::new(),
+        });
     }
 
-    let mut reports = fs::read_dir(&run_dir)
-        .map_err(|error| {
-            format!(
-                "failed to read run directory {}: {error}",
-                run_dir.display()
-            )
-        })?
-        .filter_map(|entry| entry.ok())
-        .filter_map(|entry| {
-            let path = entry.path();
-            if !path
-                .file_name()
-                .and_then(|value| value.to_str())
-                .is_some_and(|value| value.ends_with(".trace.json"))
-            {
-                return None;
+    let entries = fs::read_dir(&run_dir).map_err(|error| {
+        format!(
+            "failed to read run directory {}: {error}",
+            run_dir.display()
+        )
+    })?;
+    let mut reports = Vec::new();
+    let mut warnings = Vec::new();
+    for entry in entries {
+        let entry = match entry {
+            Ok(entry) => entry,
+            Err(error) => {
+                warnings.push(format!("failed to read run directory entry: {error}"));
+                continue;
             }
+        };
+        let path = entry.path();
+        if !path
+            .file_name()
+            .and_then(|value| value.to_str())
+            .is_some_and(|value| value.ends_with(".trace.json"))
+        {
+            continue;
+        }
 
-            let report: RunReport = serde_json::from_str(&fs::read_to_string(&path).ok()?).ok()?;
-            let modified_at_unix_ms = entry
-                .metadata()
-                .ok()?
-                .modified()
-                .ok()?
-                .duration_since(std::time::UNIX_EPOCH)
-                .ok()?
-                .as_millis();
-            Some(RunSummary {
-                run_id: report.run_id,
-                workflow_name: report.workflow_name,
-                status: report.status,
-                trace_entry_count: report.trace.len(),
-                modified_at_unix_ms,
-            })
-        })
-        .collect::<Vec<_>>();
+        match summarize_run_report(&run_dir, &path) {
+            Ok(summary) => reports.push(summary),
+            Err(error) => warnings.push(error),
+        }
+    }
 
     reports.sort_by_key(|report| std::cmp::Reverse(report.modified_at_unix_ms));
     reports.truncate(20);
-    Ok(reports)
+    Ok(RunReportList { reports, warnings })
 }
 
 #[tauri::command]
@@ -274,9 +278,8 @@ fn read_run_report(run_id: String) -> Result<RunReport, String> {
         return Err("invalid run id".to_string());
     }
 
-    let path = repo_root()?
-        .join("runs")
-        .join(format!("{run_id}.trace.json"));
+    let run_dir = repo_root()?.join("runs");
+    let path = confine_discovered_path(&run_dir, &run_dir.join(format!("{run_id}.trace.json")))?;
     let contents = fs::read_to_string(&path)
         .map_err(|error| format!("failed to read run report {}: {error}", path.display()))?;
     serde_json::from_str(&contents)
@@ -410,6 +413,30 @@ fn summarize_environment(root: &Path, environment_dir: &Path, path: &Path) -> En
     }
 }
 
+fn summarize_run_report(run_dir: &Path, path: &Path) -> Result<RunSummary, String> {
+    let path = confine_discovered_path(run_dir, path)?;
+    let contents = fs::read_to_string(&path)
+        .map_err(|error| format!("failed to read run report {}: {error}", path.display()))?;
+    let report: RunReport = serde_json::from_str(&contents)
+        .map_err(|error| format!("failed to parse run report {}: {error}", path.display()))?;
+    let modified_at_unix_ms = fs::metadata(&path)
+        .and_then(|metadata| metadata.modified())
+        .and_then(|modified| {
+            modified
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_err(std::io::Error::other)
+        })
+        .map_err(|error| format!("failed to read run report metadata: {error}"))?
+        .as_millis();
+    Ok(RunSummary {
+        run_id: report.run_id,
+        workflow_name: report.workflow_name,
+        status: report.status,
+        trace_entry_count: report.trace.len(),
+        modified_at_unix_ms,
+    })
+}
+
 fn write_run_report(root: &Path, report: &RunReport) -> Result<(), String> {
     let run_dir = root.join("runs");
     fs::create_dir_all(&run_dir).map_err(|error| {
@@ -421,8 +448,7 @@ fn write_run_report(root: &Path, report: &RunReport) -> Result<(), String> {
     let path = run_dir.join(format!("{}.trace.json", report.run_id));
     let contents = serde_json::to_string_pretty(report)
         .map_err(|error| format!("failed to serialize run report: {error}"))?;
-    fs::write(&path, contents)
-        .map_err(|error| format!("failed to write run report {}: {error}", path.display()))
+    replace_file_safely(&path, contents.as_bytes())
 }
 
 fn replace_file_safely(path: &Path, contents: &[u8]) -> Result<(), String> {
@@ -623,7 +649,8 @@ mod tests {
 
     use super::{
         confine_discovered_path, replace_file_safely, resolve_environment_path,
-        resolve_workflow_path, summarize_environment, summarize_workflow, validate_workflow_source,
+        resolve_workflow_path, summarize_environment, summarize_run_report, summarize_workflow,
+        validate_workflow_source,
     };
 
     #[test]
@@ -735,6 +762,28 @@ mod tests {
         assert!(confine_discovered_path(&allowed, &outside).is_err());
 
         fs::remove_dir_all(&root).expect("remove test directory");
+    }
+
+    #[test]
+    fn corrupt_run_reports_return_file_errors() {
+        let unique = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .expect("time after epoch")
+            .as_nanos();
+        let directory = std::env::temp_dir().join(format!(
+            "devknife-corrupt-report-{}-{unique}",
+            std::process::id()
+        ));
+        fs::create_dir(&directory).expect("create test directory");
+        let path = directory.join("broken.trace.json");
+        fs::write(&path, "{").expect("write corrupt report");
+
+        let error = summarize_run_report(&directory, &path).expect_err("corrupt report must fail");
+
+        assert!(error.contains("failed to parse run report"));
+        assert!(error.contains("broken.trace.json"));
+
+        fs::remove_dir_all(&directory).expect("remove test directory");
     }
 
     #[test]

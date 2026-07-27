@@ -53,5 +53,7 @@ exists.
 Desktop discovery and repository path guards accept both `.yaml` and `.yml` artifacts.
 Discovered files are canonicalized before reading, so symlinks cannot escape their workflow or
 environment directories.
+Persisted trace reads use the same confinement, corrupt reports produce per-file warnings without
+hiding valid history, and trace writes safely replace existing paths without following symlinks.
 
 On Linux, Tauri requires WebKit/GTK development packages. See `../../docs/008-devcontainer-and-tooling.md`.
