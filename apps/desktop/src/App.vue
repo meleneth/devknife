@@ -268,7 +268,7 @@ async function loadPlan() {
   } catch (cause) {
     if (requestId !== planRequestId) return
 
-    selectedPlan.value = fallbackPlan(selectedWorkflow.value)
+    selectedPlan.value = null
     error.value = `Unable to load plan from backend. ${String(cause)}`
   } finally {
     if (requestId === planRequestId) {
@@ -454,63 +454,6 @@ function fallbackWorkflows(): WorkflowSummary[] {
       capabilityCount: 9,
     },
   ]
-}
-
-function fallbackPlan(workflow: WorkflowSummary | undefined): RunPlan {
-  return {
-    workflow_name: workflow?.name ?? 'cross-protocol-smoke',
-    workflow_version: workflow?.version ?? 'devknife.workflow/v1alpha1',
-    required_capabilities: [
-      {
-        id: 'network.http.read',
-        risk: 'read',
-        description: 'Call a REST HTTP endpoint.',
-      },
-      {
-        id: 'network.graphql',
-        risk: 'write',
-        description: 'Call a GraphQL endpoint.',
-      },
-      {
-        id: 'network.websocket',
-        risk: 'write',
-        description: 'Open a WebSocket connection and exchange messages.',
-      },
-      {
-        id: 'aws.sns.publish',
-        risk: 'write',
-        description: 'Publish a message to an SNS topic.',
-      },
-      {
-        id: 'aws.sqs.receive',
-        risk: 'read',
-        description: 'Receive messages from an SQS queue.',
-      },
-    ],
-    effects: [
-      {
-        handler_index: 0,
-        effect_index: 0,
-        on: 'workflow.started',
-        effect_type: 'rest',
-        capabilities: ['network.http.read'],
-      },
-      {
-        handler_index: 1,
-        effect_index: 0,
-        on: 'account.loaded',
-        effect_type: 'graphql',
-        capabilities: ['network.graphql'],
-      },
-      {
-        handler_index: 2,
-        effect_index: 0,
-        on: 'account.users.loaded',
-        effect_type: 'websocket',
-        capabilities: ['network.websocket'],
-      },
-    ],
-  }
 }
 
 function fallbackSource(workflow: WorkflowSummary | undefined) {

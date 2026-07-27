@@ -30,6 +30,6 @@ The recent-runs panel can reopen persisted CLI or desktop reports in the trace i
 The environment selector chooses repository-confined runtime bindings while showing only service,
 value, and secret-reference counts. Changing it also preflights the visible run plan against those
 bindings. Runs remain disabled until that backend plan succeeds for the currently selected workflow
-and environment.
+and environment; failed preflights do not display synthetic fallback plan data.
 
 On Linux, Tauri requires WebKit/GTK development packages. See `../../docs/008-devcontainer-and-tooling.md`.
