@@ -26,6 +26,8 @@ enum Command {
         json: bool,
         #[arg(long)]
         show_plan: bool,
+        #[arg(long, help = "Print the run plan without executing effects")]
+        dry_run: bool,
         #[arg(long, value_name = "DIR", default_value = "runs")]
         trace_dir: PathBuf,
         #[arg(long)]
@@ -59,6 +61,7 @@ fn main() -> Result<()> {
             environment,
             json,
             show_plan,
+            dry_run,
             trace_dir,
             no_trace_file,
             allow_write,
@@ -66,6 +69,14 @@ fn main() -> Result<()> {
         } => {
             let workflow = read_workflow(workflow)?;
             let plan = plan_workflow(&workflow);
+            if dry_run {
+                if json {
+                    println!("{}", serde_json::to_string_pretty(&plan)?);
+                } else {
+                    print_human_plan(&plan);
+                }
+                return Ok(());
+            }
             if show_plan && !json {
                 print_human_plan(&plan);
                 println!();

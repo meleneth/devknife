@@ -56,6 +56,7 @@ Useful commands:
 - `cargo test`
 - `cargo run -p devknife-cli -- run examples/workflows/bootstrap.workflow.yaml`
 - `cargo run -p devknife-cli -- run examples/workflows/bootstrap.workflow.yaml --json`
+- `cargo run -p devknife-cli -- run examples/workflows/bootstrap.workflow.yaml --dry-run`
 - `cargo run -p devknife-cli -- plan examples/workflows/bootstrap.workflow.yaml`
 - `cargo run -p devknife-cli -- validate examples/workflows/bootstrap.workflow.yaml`
 - `npm --prefix apps/desktop run build`
@@ -70,6 +71,8 @@ on both Linux and Windows.
 Write-capable effects are denied by default. Approve exact capabilities with repeatable
 `--allow-capability <capability>` flags, or use `--allow-write` to approve every write capability
 listed by the run plan.
+`--dry-run` prints that plan without loading the runtime environment, executing effects, or
+writing a trace artifact.
 
 The desktop app lives in `apps/desktop`. `dev:web` runs the Vue shell in a browser with fallback scaffold data; `dev:tauri` runs the desktop app and invokes Rust commands for workflow listing, planning, and execution. On Linux, Tauri requires WebKit/GTK system development packages; see `docs/008-devcontainer-and-tooling.md`.
 

@@ -56,6 +56,6 @@ Cross-platform secret-store integration details are deferred and tracked in open
 
 ## Dry-Run Intent
 
-Where practical, effects should support dry-run behavior or preflight checks.
-
-Dry-run is likely protocol-specific and must be explicit when unavailable.
+`devknife run <workflow> --dry-run` parses and validates the workflow, then prints its capability
+and effect plan without loading runtime bindings, executing effects, or writing a trace artifact.
+Protocol-specific connectivity preflights remain future work and must be explicit when added.
