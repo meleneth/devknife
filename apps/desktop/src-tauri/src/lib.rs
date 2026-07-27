@@ -72,7 +72,7 @@ fn list_workflows() -> Result<Vec<WorkflowSummary>, String> {
             continue;
         }
 
-        workflows.push(summarize_workflow(&root, &path));
+        workflows.push(summarize_workflow(&root, &workflow_dir, &path));
     }
 
     workflows.sort_by(|left, right| left.name.cmp(&right.name));
@@ -97,7 +97,7 @@ fn list_environments() -> Result<Vec<EnvironmentSummary>, String> {
             continue;
         }
 
-        environments.push(summarize_environment(&root, &path));
+        environments.push(summarize_environment(&root, &environment_dir, &path));
     }
 
     environments.sort_by(|left, right| left.name.cmp(&right.name));
@@ -323,9 +323,25 @@ fn read_environment_file(path: &Path) -> Result<RuntimeEnvironment, String> {
     load_environment_yaml(&contents).map_err(|error| error.to_string())
 }
 
-fn summarize_workflow(root: &Path, path: &Path) -> WorkflowSummary {
+fn summarize_workflow(root: &Path, workflow_dir: &Path, path: &Path) -> WorkflowSummary {
     let ui_path = path_to_ui(root, path);
-    match read_workflow(path) {
+    let confined_path = match confine_discovered_path(workflow_dir, path) {
+        Ok(path) => path,
+        Err(error) => {
+            return WorkflowSummary {
+                name: artifact_name(path, "workflow"),
+                version: "invalid".to_string(),
+                path: ui_path,
+                valid: false,
+                validation_error: Some(error),
+                seed_event_count: 0,
+                handler_count: 0,
+                effect_count: 0,
+                capability_count: 0,
+            };
+        }
+    };
+    match read_workflow(&confined_path) {
         Ok(workflow) => {
             let plan = plan_workflow(&workflow);
             WorkflowSummary {
@@ -354,9 +370,23 @@ fn summarize_workflow(root: &Path, path: &Path) -> WorkflowSummary {
     }
 }
 
-fn summarize_environment(root: &Path, path: &Path) -> EnvironmentSummary {
+fn summarize_environment(root: &Path, environment_dir: &Path, path: &Path) -> EnvironmentSummary {
     let ui_path = path_to_ui(root, path);
-    match read_environment_file(path) {
+    let confined_path = match confine_discovered_path(environment_dir, path) {
+        Ok(path) => path,
+        Err(error) => {
+            return EnvironmentSummary {
+                name: artifact_name(path, "environment"),
+                path: ui_path,
+                valid: false,
+                validation_error: Some(error),
+                service_count: 0,
+                value_count: 0,
+                secret_count: 0,
+            };
+        }
+    };
+    match read_environment_file(&confined_path) {
         Ok(environment) => EnvironmentSummary {
             name: environment
                 .name
@@ -563,6 +593,23 @@ fn is_yaml_path(path: &Path) -> bool {
     )
 }
 
+fn confine_discovered_path(directory: &Path, path: &Path) -> Result<PathBuf, String> {
+    let directory = directory
+        .canonicalize()
+        .map_err(|error| format!("failed to resolve artifact directory: {error}"))?;
+    let candidate = path
+        .canonicalize()
+        .map_err(|error| format!("failed to resolve artifact {}: {error}", path.display()))?;
+    if !candidate.starts_with(&directory) {
+        return Err(format!(
+            "artifact {} resolves outside {}",
+            path.display(),
+            directory.display()
+        ));
+    }
+    Ok(candidate)
+}
+
 fn artifact_name(path: &Path, fallback: &str) -> String {
     path.file_stem()
         .and_then(|value| value.to_str())
@@ -575,8 +622,8 @@ mod tests {
     use std::{fs, time::SystemTime};
 
     use super::{
-        replace_file_safely, resolve_environment_path, resolve_workflow_path,
-        summarize_environment, summarize_workflow, validate_workflow_source,
+        confine_discovered_path, replace_file_safely, resolve_environment_path,
+        resolve_workflow_path, summarize_environment, summarize_workflow, validate_workflow_source,
     };
 
     #[test]
@@ -615,8 +662,8 @@ mod tests {
         fs::write(&workflow_path, "name: [").expect("write invalid workflow");
         fs::write(&environment_path, "services: [").expect("write invalid environment");
 
-        let workflow = summarize_workflow(&directory, &workflow_path);
-        let environment = summarize_environment(&directory, &environment_path);
+        let workflow = summarize_workflow(&directory, &directory, &workflow_path);
+        let environment = summarize_environment(&directory, &directory, &environment_path);
 
         assert!(!workflow.valid);
         assert_eq!(workflow.name, "broken.workflow");
@@ -660,6 +707,32 @@ mod tests {
             environment
         );
         assert!(resolve_workflow_path(&root, "examples/workflows/workflow.json").is_err());
+
+        fs::remove_dir_all(&root).expect("remove test directory");
+    }
+
+    #[test]
+    fn discovery_rejects_artifacts_outside_its_directory() {
+        let unique = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .expect("time after epoch")
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!(
+            "devknife-confined-artifacts-{}-{unique}",
+            std::process::id()
+        ));
+        let allowed = root.join("allowed");
+        fs::create_dir_all(&allowed).expect("create allowed directory");
+        let inside = allowed.join("inside.yaml");
+        let outside = root.join("outside.yaml");
+        fs::write(&inside, "name: inside\n").expect("write inside artifact");
+        fs::write(&outside, "name: outside\n").expect("write outside artifact");
+
+        assert_eq!(
+            confine_discovered_path(&allowed, &inside).expect("inside path is accepted"),
+            inside
+        );
+        assert!(confine_discovered_path(&allowed, &outside).is_err());
 
         fs::remove_dir_all(&root).expect("remove test directory");
     }

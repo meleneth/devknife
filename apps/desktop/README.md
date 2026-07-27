@@ -51,5 +51,7 @@ invalid workflows stay editable, and per-file validation errors are shown in pla
 Automatic selection prefers a valid artifact while preserving any explicit selection that still
 exists.
 Desktop discovery and repository path guards accept both `.yaml` and `.yml` artifacts.
+Discovered files are canonicalized before reading, so symlinks cannot escape their workflow or
+environment directories.
 
 On Linux, Tauri requires WebKit/GTK development packages. See `../../docs/008-devcontainer-and-tooling.md`.
