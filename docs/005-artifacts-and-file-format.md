@@ -101,3 +101,5 @@ expectation, and emission levels. Misspelled keys therefore fail validation inst
 silently ignored.
 Environment files likewise reject unknown top-level sections and service-binding fields.
 Use `devknife validate-environment <path>` to validate an environment independently from a run.
+The test suite also parses every checked-in example workflow and environment to catch schema drift
+in CI.

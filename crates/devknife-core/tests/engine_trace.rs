@@ -6,8 +6,10 @@ use devknife_core::{
 use serde_json::json;
 use std::{
     collections::BTreeMap,
+    fs,
     io::{Read, Write},
     net::TcpListener,
+    path::Path,
     thread,
 };
 use tungstenite::{accept, Message as WsMessage};
@@ -305,6 +307,42 @@ services:
         .expect_err("unknown service binding field must fail")
         .to_string()
         .contains("unknown field `timeout`"));
+}
+
+#[test]
+fn checked_in_example_artifacts_match_the_current_schema() {
+    let repository_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .and_then(Path::parent)
+        .expect("repository root");
+
+    let workflow_dir = repository_root.join("examples/workflows");
+    let workflows = yaml_files(&workflow_dir);
+    assert!(!workflows.is_empty(), "example workflows must exist");
+    for path in workflows {
+        let source = fs::read_to_string(&path).expect("read example workflow");
+        devknife_core::load_workflow_yaml(&source)
+            .unwrap_or_else(|error| panic!("{} must validate: {error}", path.display()));
+    }
+
+    let environment_dir = repository_root.join("examples/environments");
+    let environments = yaml_files(&environment_dir);
+    assert!(!environments.is_empty(), "example environments must exist");
+    for path in environments {
+        let source = fs::read_to_string(&path).expect("read example environment");
+        devknife_core::load_environment_yaml(&source)
+            .unwrap_or_else(|error| panic!("{} must validate: {error}", path.display()));
+    }
+}
+
+fn yaml_files(directory: &Path) -> Vec<std::path::PathBuf> {
+    let mut paths = fs::read_dir(directory)
+        .unwrap_or_else(|error| panic!("read {}: {error}", directory.display()))
+        .filter_map(|entry| entry.ok().map(|entry| entry.path()))
+        .filter(|path| path.extension().and_then(|value| value.to_str()) == Some("yaml"))
+        .collect::<Vec<_>>();
+    paths.sort();
+    paths
 }
 
 #[test]
