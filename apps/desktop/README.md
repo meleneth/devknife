@@ -42,5 +42,7 @@ Workflow source reads ignore stale responses from earlier selections and lock th
 current file finishes loading.
 Validation and saving operate on an exact source snapshot; editing or switching workflows cannot
 apply a stale validation result to different content.
+Active runs lock workflow, environment, source, and history selection; returned reports are applied
+only to the exact workflow/environment request that produced them.
 
 On Linux, Tauri requires WebKit/GTK development packages. See `../../docs/008-devcontainer-and-tooling.md`.

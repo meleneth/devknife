@@ -143,6 +143,7 @@ const plannedEnvironmentPath = ref('')
 let planRequestId = 0
 let sourceRequestId = 0
 let validationRequestId = 0
+let runRequestId = 0
 let loadingOperationCount = 0
 
 const selectedWorkflow = computed(() =>
@@ -461,22 +462,44 @@ async function runSelectedWorkflow() {
     return
   }
 
+  const requestId = ++runRequestId
+  const workflowPath = selectedPath.value
+  const environmentPath = selectedEnvironmentPath.value
   running.value = true
   error.value = ''
   try {
-    runReport.value = await invoke<RunReport>('run_workflow_file', {
-      path: selectedPath.value,
-      environmentPath: selectedEnvironmentPath.value || null,
+    const report = await invoke<RunReport>('run_workflow_file', {
+      path: workflowPath,
+      environmentPath: environmentPath || null,
       allowedCapabilities: writeCapabilities.map(
         (capability) => capability.id,
       ),
     })
     await refreshRunHistory()
+    if (
+      requestId !== runRequestId ||
+      selectedPath.value !== workflowPath ||
+      selectedEnvironmentPath.value !== environmentPath
+    ) {
+      return
+    }
+
+    runReport.value = report
     activeTab.value = 'trace'
   } catch (cause) {
+    if (
+      requestId !== runRequestId ||
+      selectedPath.value !== workflowPath ||
+      selectedEnvironmentPath.value !== environmentPath
+    ) {
+      return
+    }
+
     error.value = `Run failed before the engine returned a report. ${String(cause)}`
   } finally {
-    running.value = false
+    if (requestId === runRequestId) {
+      running.value = false
+    }
   }
 }
 
@@ -559,7 +582,7 @@ function traceDetail(entry: TraceEntry) {
                     variant="outline"
                     size="icon"
                     class="size-8 border-2 border-black bg-white shadow-[2px_2px_0_#000]"
-                    :disabled="loading"
+                    :disabled="loading || running"
                     @click="refreshWorkflows"
                   >
                     <RefreshCw class="size-4" />
@@ -575,7 +598,7 @@ function traceDetail(entry: TraceEntry) {
                 :key="workflow.path"
                 class="mb-3 w-full border-2 border-black bg-white p-3 text-left shadow-[4px_4px_0_#000] transition-transform hover:-translate-y-0.5"
                 :class="workflow.path === selectedPath ? 'bg-[#d9f99d]' : ''"
-                :disabled="loading || validating || saving"
+                :disabled="loading || validating || saving || running"
                 @click="selectWorkflow(workflow.path)"
               >
                 <div class="mb-2 flex items-start justify-between gap-2">
@@ -613,7 +636,11 @@ function traceDetail(entry: TraceEntry) {
                 variant="outline"
                 class="border-2 border-black bg-[#6ee7f9] text-black shadow-[3px_3px_0_#000]"
                 :disabled="
-                  loading || !selectedPath || sourceDirty || !!environmentError
+                  running ||
+                  loading ||
+                  !selectedPath ||
+                  sourceDirty ||
+                  !!environmentError
                 "
                 @click="loadPlan"
               >
@@ -626,7 +653,7 @@ function traceDetail(entry: TraceEntry) {
                 @click="runSelectedWorkflow"
               >
                 <Play class="size-4" />
-                Run
+                {{ running ? 'Running…' : 'Run' }}
               </Button>
             </div>
           </header>
@@ -727,6 +754,7 @@ function traceDetail(entry: TraceEntry) {
                             :disabled="
                               saving ||
                               validating ||
+                              running ||
                               sourceLoading ||
                               !sourceDirty
                             "
@@ -741,6 +769,7 @@ function traceDetail(entry: TraceEntry) {
                             :disabled="
                               saving ||
                               validating ||
+                              running ||
                               sourceLoading ||
                               !workflowSource
                             "
@@ -754,6 +783,7 @@ function traceDetail(entry: TraceEntry) {
                             :disabled="
                               saving ||
                               validating ||
+                              running ||
                               sourceLoading ||
                               !sourceDirty
                             "
@@ -792,7 +822,9 @@ function traceDetail(entry: TraceEntry) {
                         spellcheck="false"
                         aria-label="Workflow YAML source"
                         class="min-h-[520px] resize-none border-2 border-black bg-neutral-950 p-4 font-mono text-xs leading-5 text-lime-200"
-                        :disabled="sourceLoading || validating || saving"
+                        :disabled="
+                          sourceLoading || validating || saving || running
+                        "
                         @update:model-value="markSourceChanged"
                       />
                     </CardContent>
@@ -902,6 +934,7 @@ function traceDetail(entry: TraceEntry) {
                     v-model="selectedEnvironmentPath"
                     aria-label="Runtime environment"
                     class="h-10 w-full border-2 border-black bg-white px-3 text-sm font-bold"
+                    :disabled="loading || validating || saving || running"
                   >
                     <option value="">No environment</option>
                     <option
@@ -924,7 +957,7 @@ function traceDetail(entry: TraceEntry) {
                       variant="outline"
                       size="sm"
                       class="border-2 border-black bg-white"
-                      :disabled="loading"
+                      :disabled="loading || running"
                       @click="refreshEnvironments"
                     >
                       <RefreshCw class="size-3" />
@@ -1016,6 +1049,7 @@ function traceDetail(entry: TraceEntry) {
                       v-for="run in runHistory"
                       :key="run.runId"
                       class="w-full border-2 border-black bg-[#fffdf4] p-3 text-left hover:bg-[#d9f99d]"
+                      :disabled="running"
                       @click="loadRunReport(run.runId)"
                     >
                       <div class="flex items-center justify-between gap-2">
