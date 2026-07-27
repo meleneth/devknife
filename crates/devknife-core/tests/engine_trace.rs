@@ -310,6 +310,49 @@ services:
 }
 
 #[test]
+fn workflow_environment_preflight_reports_all_missing_bindings() {
+    let workflow = devknife_core::load_workflow_yaml(
+        r#"
+name: binding-preflight
+handlers:
+  - on: workflow.started
+    effects:
+      - type: rest
+        service: accounts
+        method: GET
+        path: "/accounts/{{ env.account_id }}"
+        headers:
+          authorization: "Bearer {{ secret.api_token }}"
+"#,
+    )
+    .expect("workflow parses");
+
+    let error =
+        devknife_core::validate_workflow_environment(&workflow, &RuntimeEnvironment::default())
+            .expect_err("missing bindings must fail")
+            .to_string();
+    assert!(error.contains("service 'accounts'"));
+    assert!(error.contains("value 'account_id'"));
+    assert!(error.contains("secret 'api_token'"));
+
+    let mut services = BTreeMap::new();
+    services.insert(
+        "accounts".to_string(),
+        ServiceBinding {
+            base_url: "http://localhost:18101".to_string(),
+        },
+    );
+    let environment = RuntimeEnvironment {
+        services,
+        values: BTreeMap::from([("account_id".to_string(), "acct_001".to_string())]),
+        secret_refs: BTreeMap::from([("api_token".to_string(), "local-token".to_string())]),
+        ..RuntimeEnvironment::default()
+    };
+    devknife_core::validate_workflow_environment(&workflow, &environment)
+        .expect("complete bindings pass");
+}
+
+#[test]
 fn checked_in_example_artifacts_match_the_current_schema() {
     let repository_root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()

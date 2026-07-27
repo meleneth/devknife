@@ -6,8 +6,8 @@ use std::{
 };
 
 use devknife_core::{
-    load_environment_yaml, load_workflow_yaml, plan_workflow, ExecutionLimits, ExecutionPolicy,
-    LoadError, RunPlan, RunReport, Runner, RuntimeEnvironment,
+    load_environment_yaml, load_workflow_yaml, plan_workflow, validate_workflow_environment,
+    ExecutionLimits, ExecutionPolicy, LoadError, RunPlan, RunReport, Runner, RuntimeEnvironment,
 };
 use serde::Serialize;
 
@@ -214,6 +214,7 @@ fn run_workflow_file(
         }
         None => RuntimeEnvironment::default(),
     };
+    validate_workflow_environment(&workflow, &environment).map_err(|error| error.to_string())?;
     let report = Runner::with_environment_and_policy(
         ExecutionLimits::default(),
         environment,

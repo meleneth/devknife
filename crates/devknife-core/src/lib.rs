@@ -17,5 +17,6 @@ pub use domain::{
 };
 pub use engine::{EngineError, ExecutionLimits, ExecutionPolicy, Runner};
 pub use loader::{
-    load_environment_yaml, load_workflow_yaml, validate_environment, validate_workflow, LoadError,
+    load_environment_yaml, load_workflow_yaml, validate_environment, validate_workflow,
+    validate_workflow_environment, LoadError,
 };

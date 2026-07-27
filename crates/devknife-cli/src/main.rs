@@ -3,9 +3,9 @@ use std::{fs, path::PathBuf};
 use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
 use devknife_core::{
-    load_environment_yaml, load_workflow_yaml, plan_workflow, validate_workflow, ExecutionLimits,
-    ExecutionPolicy, GraphqlAssertionObservation, Observation, RestAssertionObservation, RunPlan,
-    RunReport, RunStatus, Runner, TraceEntryKind,
+    load_environment_yaml, load_workflow_yaml, plan_workflow, validate_workflow,
+    validate_workflow_environment, ExecutionLimits, ExecutionPolicy, GraphqlAssertionObservation,
+    Observation, RestAssertionObservation, RunPlan, RunReport, RunStatus, Runner, TraceEntryKind,
 };
 
 #[derive(Debug, Parser)]
@@ -44,6 +44,8 @@ enum Command {
     },
     Validate {
         workflow: PathBuf,
+        #[arg(long, value_name = "PATH")]
+        environment: Option<PathBuf>,
     },
     ValidateEnvironment {
         environment: PathBuf,
@@ -85,6 +87,7 @@ fn main() -> Result<()> {
                 println!();
             }
             let environment = read_environment(environment)?;
+            validate_workflow_environment(&workflow, &environment)?;
             let policy = if allow_write {
                 ExecutionPolicy::allow_all()
             } else {
@@ -114,9 +117,16 @@ fn main() -> Result<()> {
                 bail!("workflow run failed");
             }
         }
-        Command::Validate { workflow } => {
+        Command::Validate {
+            workflow,
+            environment,
+        } => {
             let workflow = read_workflow(workflow)?;
             validate_workflow(&workflow)?;
+            if let Some(environment) = environment {
+                let environment = read_environment(Some(environment))?;
+                validate_workflow_environment(&workflow, &environment)?;
+            }
             println!("valid workflow: {}", workflow.name);
         }
         Command::ValidateEnvironment { environment } => {

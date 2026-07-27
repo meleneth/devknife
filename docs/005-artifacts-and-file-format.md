@@ -103,3 +103,6 @@ Environment files likewise reject unknown top-level sections and service-binding
 Use `devknife validate-environment <path>` to validate an environment independently from a run.
 The test suite also parses every checked-in example workflow and environment to catch schema drift
 in CI.
+`devknife validate <workflow> --environment <environment>` additionally preflights named services,
+environment values, and secret references. CLI and desktop runs perform this binding preflight
+before executing effects.

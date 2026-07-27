@@ -1,5 +1,6 @@
 use serde::Deserialize;
 use serde_json::Value;
+use std::collections::BTreeSet;
 use thiserror::Error;
 
 use crate::domain::{
@@ -56,6 +57,84 @@ pub fn validate_environment(environment: &RuntimeEnvironment) -> Result<(), Load
     }
 
     Ok(())
+}
+
+pub fn validate_workflow_environment(
+    workflow: &Workflow,
+    environment: &RuntimeEnvironment,
+) -> Result<(), LoadError> {
+    let mut missing = BTreeSet::new();
+
+    for handler in &workflow.handlers {
+        for effect in &handler.effects {
+            let service = match effect {
+                Effect::Rest(effect) => effect.service.as_deref(),
+                Effect::Graphql(effect) => effect.service.as_deref(),
+                Effect::SnsPublish(effect) => effect.service.as_deref(),
+                Effect::SqsSend(effect) => effect.service.as_deref(),
+                Effect::SqsReceive(effect) => effect.service.as_deref(),
+                Effect::Websocket(effect) => effect.service.as_deref(),
+                Effect::Emit { .. } | Effect::Record { .. } | Effect::Assert(_) => None,
+            };
+            if let Some(service) = service {
+                if !environment.services.contains_key(service) {
+                    missing.insert(format!("service '{service}'"));
+                }
+            }
+        }
+    }
+
+    let document = serde_json::to_value(workflow).expect("workflow serializes");
+    collect_missing_template_bindings(&document, environment, &mut missing);
+
+    if missing.is_empty() {
+        Ok(())
+    } else {
+        Err(LoadError::Validation(format!(
+            "missing environment bindings: {}",
+            missing.into_iter().collect::<Vec<_>>().join(", ")
+        )))
+    }
+}
+
+fn collect_missing_template_bindings(
+    value: &Value,
+    environment: &RuntimeEnvironment,
+    missing: &mut BTreeSet<String>,
+) {
+    match value {
+        Value::String(value) => {
+            let mut remaining = value.as_str();
+            while let Some(start) = remaining.find("{{") {
+                let after_start = &remaining[start + 2..];
+                let Some(end) = after_start.find("}}") else {
+                    break;
+                };
+                let expression = after_start[..end].trim();
+                if let Some(name) = expression.strip_prefix("env.") {
+                    if !environment.values.contains_key(name) {
+                        missing.insert(format!("value '{name}'"));
+                    }
+                } else if let Some(name) = expression.strip_prefix("secret.") {
+                    if !environment.secret_refs.contains_key(name) {
+                        missing.insert(format!("secret '{name}'"));
+                    }
+                }
+                remaining = &after_start[end + 2..];
+            }
+        }
+        Value::Array(values) => {
+            for value in values {
+                collect_missing_template_bindings(value, environment, missing);
+            }
+        }
+        Value::Object(values) => {
+            for value in values.values() {
+                collect_missing_template_bindings(value, environment, missing);
+            }
+        }
+        Value::Null | Value::Bool(_) | Value::Number(_) => {}
+    }
 }
 
 pub fn validate_workflow(workflow: &Workflow) -> Result<(), LoadError> {
