@@ -4,9 +4,9 @@ Status: Active
 
 ## Format And Schema
 
-- What should be the primary workflow authoring format: YAML, TOML, JSON, or mixed?
 - How strict should payload schema enforcement be in v1?
 - Should event types require registry declarations from day one?
+- What compatibility and migration promise should `devknife.workflow/v1alpha1` make?
 
 ## Protocol Integration Order
 
@@ -31,14 +31,12 @@ Status: Active
 
 ## Developer Experience
 
-- What is the first meaningful local demo scenario that proves event-native value?
-- What is the practical local SQS test strategy (for example GoAWS or LocalStack later)?
+- What production-shaped demo should become the V1 acceptance story?
 - How do we keep Rust learning value high while using AI assistance responsibly?
 
 ## Product Boundary
 
 - Where should CLI stop and desktop UI begin once both exist?
-- Which capabilities are required by default vs opt-in per run?
 
 ## Postman-Class, Not Postman-Compatible
 
@@ -51,4 +49,9 @@ Status: Active
 
 - YAML is the initial bootstrap workflow authoring format, with `devknife.workflow/v1alpha1` as the first explicit schema version. Strictness beyond current semantic validation remains open.
 - GoAWS is the first local SQS fixture; whether LocalStack is needed later remains open.
-- The first meaningful cross-protocol demo now runs against the local REST, GraphQL, WebSocket, and GoAWS fixtures. Next open question is what production-shaped demo should replace the synthetic fixture story.
+- The first meaningful cross-protocol demo runs against local REST, GraphQL, WebSocket, and GoAWS
+  fixtures. A chained REST fixture also passes a created account ID into a subsequent user-creation
+  API. The remaining question is which production-shaped story should become the V1 acceptance
+  demo.
+- Write-capable effects are opt-in per run. Exact capability approvals are the default policy;
+  approve-all remains an explicit convenience.

@@ -2,7 +2,7 @@
 
 This repository defines a file-backed, cross-platform service workflow runner for developers. The core model is event-native execution: workflows start from seed events, handlers produce effects, effects produce observations, observations may emit more typed events, and every run yields a causal trace explaining what happened and why.
 
-Status: Bootstrap implementation with narrow REST, GraphQL, SNS, SQS, and WebSocket adapters plus an initial Tauri/Vue desktop shell.
+Status: Working vertical slice preparing for a deliberately scoped V1 candidate.
 
 ## What Exists In This Repository
 
@@ -12,7 +12,7 @@ Status: Bootstrap implementation with narrow REST, GraphQL, SNS, SQS, and WebSoc
 - Draft roadmap from bootstrap to v1.
 - Devcontainer setup for Rust + Node toolchains.
 - Rust workspace with a small event-native engine, CLI, YAML loader, typed trace, and narrow REST, GraphQL, SNS, SQS, and WebSocket effects.
-- Tauri + Vue + shadcn-vue desktop scaffold that consumes the core through Tauri commands.
+- Tauri + Vue + shadcn-vue desktop workflow bench that consumes the core through Tauri commands.
 
 ## What Does Not Exist Yet
 

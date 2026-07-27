@@ -22,17 +22,19 @@ The runtime loop is event-oriented:
 - Observation Mapping: protocol response/message to typed observation.
 - Event Emission: explicit mapping from observation to next event(s).
 
-## Execution Policies (Conceptual in Bootstrap)
+## Execution Policies
 
-Execution policy settings are planned but not implemented yet:
+The current runner is deterministic and serial. It implements a maximum event count, bounded
+protocol waits/timeouts, and exact capability allowlists. Write-capable effects are denied unless
+approved for the run.
 
-- serial vs concurrent handler execution
+The following policy controls remain open for V1 scope:
+
+- serial-only vs concurrent handler execution
 - retry policy
-- timeout policy
-- max events per run
 - deduplication strategy
 - cancellation behavior
-- failure policy (fail-fast vs continue-with-errors)
+- fail-fast vs continue-with-errors
 
 ## Assertions and Expectations
 

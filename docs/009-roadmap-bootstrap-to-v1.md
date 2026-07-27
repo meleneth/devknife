@@ -1,110 +1,120 @@
 # 009 Roadmap: Bootstrap To V1
 
-Status: Draft
+Status: Active — V1 candidate preparation
 
-Reality will reshape this roadmap. Invariants should remain stable while implementation details change.
+Reality has reshaped this roadmap. The original bootstrap phases are retained as a record of the
+implementation sequence, while the current milestone and remaining work are stated explicitly.
+Invariants remain the architectural constraints when priorities change.
 
-## Phase 0: Bootstrap (Current)
+## Current Position
 
-- docs
-- devcontainer
-- project thesis
-- invariants
-- initial ADRs
-- no engine implementation
+Phases 0 through 8 are implemented in their declared narrow scope. Devknife now has:
 
-## Phase 1: Tiny CLI Engine
+- a Rust workspace with an event-native engine and CLI
+- versioned YAML workflow and environment artifacts
+- REST, GraphQL, WebSocket, SNS, and SQS effects
+- deterministic local fixtures and cross-protocol smoke workflows
+- causal trace generation and bounded, confined trace persistence
+- capability planning, exact per-capability approvals, dry runs, and secret redaction
+- a Tauri/Vue workflow browser, editor, planner, runner, and trace inspector
+- Linux and Windows CI for formatting, Clippy, Rust tests, and the desktop production build
 
-Goal: prove event loop without real network IO.
+The project is no longer in bootstrap. The active milestone is to turn this working vertical slice
+into a deliberately scoped V1 candidate.
 
-- seed event
-- handler matching
-- emit-event effect
-- trace output
-- tests for causal relationships
+## Completed Phases
 
-## Phase 2: REST Adapter
+### Phase 0: Bootstrap — Complete
 
-- simple GET/POST
-- JSON body support
-- status assertions
-- event emission from response body
-- request/response trace entries
+- product thesis, invariants, domain model, ADRs, and devcontainer/tooling baseline
 
-## Phase 3: Workflow File Format Draft
+### Phase 1: Tiny CLI Engine — Complete
 
-- parse workflow files
-- parse environment files
-- bind environment values
-- validate enough to run simple workflows
+- deterministic seed-event loop and handler matching
+- in-memory emit, record, and assertion effects
+- typed causal trace output and relationship tests
 
-## Phase 4: GraphQL Adapter
+### Phase 2: REST Adapter — Complete In Declared Scope
 
-- query/mutation over HTTP
-- variables
-- parse `data`/`errors`/`extensions`
-- GraphQL-aware assertions
-- event emission from GraphQL data
+- GET and POST with headers, query parameters, and JSON bodies
+- status assertions, response observations, and JSONPath event emission
+- chained fixture workflow that passes a created resource ID into a subsequent API call
 
-Implementation note: a first narrow adapter now exists for local HTTP GraphQL endpoints. It posts query documents with variables, treats GraphQL `errors` as run failures, emits events from `data.*` paths, and is covered by the local `graphql-service` fixture.
+### Phase 3: Workflow File Format Draft — Complete In `v1alpha1`
 
-## Phase 5: WebSocket Adapter
+- strict `devknife.workflow/v1alpha1` YAML loading
+- environment loading, template validation, and binding preflight
+- unknown-field rejection, protocol setting validation, and actionable diagnostics
+- `.yaml` and `.yml` desktop discovery with per-artifact fault isolation
 
-- connect named session
-- send JSON/text
-- receive and expectation with timeout
-- message-to-event emission
-- causal trace integration
+The schema remains alpha. Compatibility and migration policy are V1-candidate decisions.
 
-Implementation note: a first narrow adapter now exists for local `ws://` endpoints. It opens one connection per effect, sends JSON or text, reads one message with a timeout, checks received payload fields with RFC 9535 JSONPath, emits events from the received message, and is covered by the local `websocket-service` fixture.
+### Phase 4: GraphQL Adapter — Complete In Declared Scope
 
-## Phase 6: SQS Adapter
+- query and mutation documents over HTTP with variables
+- GraphQL error handling and response-data event emission
+- local deterministic GraphQL fixture coverage
 
-- send
-- poll until match
-- correlation using run id
-- delete policy
-- message-to-event emission
-- causal trace integration
+### Phase 5: WebSocket Adapter — Complete In Declared Scope
 
-Implementation note: a first narrow GoAWS-backed adapter now exists for SNS publish, SQS send, and SQS receive/delete-on-success. It parses GoAWS XML query responses, exposes received SQS message bodies and SNS notification payload JSON to JSONPath extraction, and is covered by `sns-sqs-smoke`.
+- `ws://` connection, JSON/text send, bounded receive, expectations, and event emission
+- causal trace integration and local fixture coverage
 
-## Phase 7: Safety And Run Planning
+### Phase 6: SNS/SQS Adapter — Complete In Declared Scope
 
-- declared capabilities
-- risk levels
-- run plan display
-- secret references and masking
-- dry-run where possible
+- GoAWS-backed SNS publish and SQS send/receive/delete-on-success
+- message-body and SNS envelope extraction through JSONPath
+- causal trace integration and deterministic smoke coverage
 
-Implementation note: run planning reports effect order and required capabilities for local workflow actions, HTTP/GraphQL, SNS/SQS, and WebSocket effects. The engine exposes an execution policy, CLI runs deny write-capable effects unless `--allow-write` is supplied, and the desktop requires confirmation before running plans with write-capable effects. More granular per-capability policy remains future work.
+### Phase 7: Safety And Run Planning — Complete In Declared Scope
 
-## Phase 8: Desktop UI Exploration
+- capability and risk reporting with deterministic effect order
+- default denial of write-capable effects
+- repeatable exact `--allow-capability` approvals and explicit `--allow-write`
+- desktop confirmation passed to the engine as an exact per-run allowlist
+- environment-aware plan, validate, and explicit dry-run preflight
+- secret-reference interpolation and returned/persisted trace redaction
 
-Stack: Tauri + Vue + shadcn-vue.
+Secure OS-backed secret storage and protocol connectivity checks remain V1-candidate work.
 
-- UI consumes engine API/core
-- project browser
-- workflow editor
-- trace viewer
-- run console
+### Phase 8: Desktop Workflow Bench — Complete As A Working Vertical Slice
 
-Implementation note: an initial desktop shell now exists in `apps/desktop`. It lists example workflows, selects repository-confined runtime environments without exposing secret values, requests plans from `devknife-core`, calls the engine through Tauri commands, persists and reopens searchable trace/report views, and provides a repository-confined YAML editor with validation and guarded saving.
+- repository-confined workflow and environment discovery
+- guarded YAML editing with validation, conflict detection, and safe replacement
+- environment-aware planning and capability confirmation
+- workflow execution plus searchable persisted trace history
+- stale-request rejection and context locking across loading, validation, saving, and runs
+- invalid-artifact isolation, retryable discovery errors, and hardened report ingestion
 
-## Exit Criteria For V1 Candidate
+Native packaging and interactive packaged-app smoke testing remain release work.
 
-- event-native core proven in real protocol flows
-- first-class support for REST/GraphQL/SQS/WebSocket in declared scope
-- file-backed artifacts with stable draft schema
-- causal trace sufficient for failure diagnosis
-- Linux and Windows validation path
+## Active Milestone: V1 Candidate
 
-Implementation note: GitHub Actions now runs Rust formatting, Clippy, workspace tests, and the Vue
-production build on Linux and Windows. Native package generation and interactive desktop smoke
-testing remain release-stage checks.
+The next work should be selected from these release and product gaps rather than adding more
+bootstrap phases:
 
-## Phase 1 Implementation Note
+1. Freeze the V1 scope and compatibility promise for `devknife.workflow/v1alpha1`.
+2. Build one production-shaped demo that communicates the event-native value without relying only
+   on synthetic protocol fixtures.
+3. Add native desktop packaging and an interactive Linux/Windows validation path.
+4. Decide the V1 authentication and secret-storage boundary.
+5. Decide which runtime controls enter V1: retries, cancellation, concurrency, and failure policy.
+6. Document supported protocol boundaries, especially HTTP/TLS/auth and WebSocket variants.
 
-The first implementation pass started Phase 1 with a synchronous in-memory engine, typed causal trace, YAML bootstrap workflow loading, and CLI `run`/`validate` commands. The local protocol testbed was also added early so REST, GraphQL, SQS, and WebSocket adapter work had deterministic fixtures.
+OpenAPI import, Postman conversion, plugin APIs, hosted services, and broad protocol presets remain
+post-V1 unless the scope is explicitly changed.
 
-Several real protocol effects now exist. Phase 3 should continue focusing on schema hardening, environment binding, diagnostics, and trace artifact persistence rather than first YAML parsing.
+## V1 Candidate Exit Criteria
+
+- [x] Event-native core proven through real local protocol I/O.
+- [x] Narrow REST, GraphQL, SQS, and WebSocket support in the declared scope.
+- [x] File-backed, versioned workflow/environment artifacts with strict validation.
+- [x] Causal traces sufficient for local failure diagnosis.
+- [x] Capability planning and exact approval enforcement.
+- [x] Linux and Windows CI for the Rust workspace and desktop web build.
+- [ ] Written V1 schema compatibility and migration policy.
+- [ ] Production-shaped demonstration and acceptance script.
+- [ ] Native desktop packages with interactive smoke validation.
+- [ ] Explicit V1 decision for authentication and secure secret storage.
+
+The unchecked criteria are the current release blockers.

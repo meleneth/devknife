@@ -26,6 +26,9 @@ Current run planning reports required capabilities before execution:
 - `aws.sqs.receive`
 - `aws.sqs.delete`
 - `network.websocket`
+
+Reserved examples for possible future adapters:
+
 - `future.db.write`
 - `future.shell.exec`
 
@@ -57,5 +60,6 @@ Cross-platform secret-store integration details are deferred and tracked in open
 ## Dry-Run Intent
 
 `devknife run <workflow> --dry-run` parses and validates the workflow, then prints its capability
-and effect plan without loading runtime bindings, executing effects, or writing a trace artifact.
+and effect plan without executing effects or writing a trace artifact. When `--environment` is
+provided, dry-run also loads it and preflights workflow bindings.
 Protocol-specific connectivity preflights remain future work and must be explicit when added.
