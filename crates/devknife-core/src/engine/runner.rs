@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeMap, VecDeque},
+    collections::{BTreeMap, BTreeSet, VecDeque},
     io::{Read, Write},
     net::TcpStream,
     time::Duration,
@@ -42,20 +42,32 @@ impl Default for ExecutionLimits {
 
 #[derive(Clone, Debug)]
 pub struct ExecutionPolicy {
-    pub allow_write_capabilities: bool,
+    allowed_write_capabilities: Option<BTreeSet<String>>,
 }
 
 impl ExecutionPolicy {
     pub fn allow_all() -> Self {
         Self {
-            allow_write_capabilities: true,
+            allowed_write_capabilities: None,
         }
     }
 
     pub fn deny_write() -> Self {
         Self {
-            allow_write_capabilities: false,
+            allowed_write_capabilities: Some(BTreeSet::new()),
         }
+    }
+
+    pub fn allow_capabilities(capabilities: impl IntoIterator<Item = impl Into<String>>) -> Self {
+        Self {
+            allowed_write_capabilities: Some(capabilities.into_iter().map(Into::into).collect()),
+        }
+    }
+
+    fn allows(&self, capability: &str) -> bool {
+        self.allowed_write_capabilities
+            .as_ref()
+            .is_none_or(|allowed| allowed.contains(capability))
     }
 }
 
@@ -108,22 +120,22 @@ impl Runner {
             workflow_name: workflow.name.clone(),
         });
 
-        if !self.policy.allow_write_capabilities {
-            let denied = plan_workflow(&workflow)
-                .required_capabilities
-                .into_iter()
-                .filter(|capability| capability.risk == CapabilityRisk::Write)
-                .map(|capability| capability.id)
-                .collect::<Vec<_>>();
-            if !denied.is_empty() {
-                return state.fail(
-                    None,
-                    EngineError::WriteCapabilitiesDenied {
-                        capabilities: denied.join(", "),
-                    }
-                    .to_string(),
-                );
-            }
+        let denied = plan_workflow(&workflow)
+            .required_capabilities
+            .into_iter()
+            .filter(|capability| {
+                capability.risk == CapabilityRisk::Write && !self.policy.allows(&capability.id)
+            })
+            .map(|capability| capability.id)
+            .collect::<Vec<_>>();
+        if !denied.is_empty() {
+            return state.fail(
+                None,
+                EngineError::WriteCapabilitiesDenied {
+                    capabilities: denied.join(", "),
+                }
+                .to_string(),
+            );
         }
 
         let mut queue = VecDeque::new();

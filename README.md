@@ -64,6 +64,9 @@ Useful commands:
 - `docker compose -f testbed/docker-compose.yml config`
 
 `run` writes a stable JSON trace artifact to `runs/<run_id>.trace.json` by default. Use `--trace-dir <dir>` to choose another directory or `--no-trace-file` for stdout-only runs.
+Write-capable effects are denied by default. Approve exact capabilities with repeatable
+`--allow-capability <capability>` flags, or use `--allow-write` to approve every write capability
+listed by the run plan.
 
 The desktop app lives in `apps/desktop`. `dev:web` runs the Vue shell in a browser with fallback scaffold data; `dev:tauri` runs the desktop app and invokes Rust commands for workflow listing, planning, and execution. On Linux, Tauri requires WebKit/GTK system development packages; see `docs/008-devcontainer-and-tooling.md`.
 

@@ -31,9 +31,9 @@ Current run planning reports required capabilities before execution:
 
 `devknife plan <workflow>` displays required capabilities and effect order, and
 `devknife run --show-plan <workflow>` can print the same summary before execution. CLI runs deny
-write-capable effects unless `--allow-write` is supplied. The desktop requires explicit
-confirmation for the same class of effects. More granular per-capability policy remains future
-work.
+write-capable effects unless each one is approved with a repeatable
+`--allow-capability <capability>` option. `--allow-write` remains available as an explicit
+approve-all convenience. The desktop requires explicit confirmation for write-capable effects.
 
 ## Risk Levels
 

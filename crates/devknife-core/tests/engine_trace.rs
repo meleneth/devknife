@@ -344,6 +344,43 @@ handlers:
 }
 
 #[test]
+fn execution_policy_allows_only_named_write_capabilities() {
+    let workflow = devknife_core::load_workflow_yaml(
+        r#"
+name: partial-write-approval
+seed_events:
+  - id: seed
+    type: workflow.started
+handlers:
+  - on: workflow.started
+    effects:
+      - type: graphql
+        operation: create_account
+        base_url: http://127.0.0.1:1/graphql
+        query: "mutation { createAccount { id } }"
+      - type: websocket
+        operation: notify
+        url: ws://127.0.0.1:1
+        send:
+          text: notify
+"#,
+    )
+    .expect("workflow parses");
+
+    let report = Runner::with_environment_and_policy(
+        ExecutionLimits::default(),
+        devknife_core::RuntimeEnvironment::default(),
+        devknife_core::ExecutionPolicy::allow_capabilities(["network.graphql"]),
+    )
+    .run(workflow);
+    let failure = report.failure.expect("failure");
+
+    assert!(failure.message.contains("network.websocket"));
+    assert!(!failure.message.contains("network.graphql"));
+    assert_eq!(report.trace.len(), 2);
+}
+
+#[test]
 fn secret_templates_are_redacted_from_run_reports() {
     let workflow = devknife_core::load_workflow_yaml(
         r#"

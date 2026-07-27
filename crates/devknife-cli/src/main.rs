@@ -32,6 +32,13 @@ enum Command {
         no_trace_file: bool,
         #[arg(long, help = "Approve capabilities classified as write")]
         allow_write: bool,
+        #[arg(
+            long,
+            value_name = "CAPABILITY",
+            conflicts_with = "allow_write",
+            help = "Approve one exact write capability; may be repeated"
+        )]
+        allow_capability: Vec<String>,
     },
     Validate {
         workflow: PathBuf,
@@ -55,6 +62,7 @@ fn main() -> Result<()> {
             trace_dir,
             no_trace_file,
             allow_write,
+            allow_capability,
         } => {
             let workflow = read_workflow(workflow)?;
             let plan = plan_workflow(&workflow);
@@ -66,7 +74,7 @@ fn main() -> Result<()> {
             let policy = if allow_write {
                 ExecutionPolicy::allow_all()
             } else {
-                ExecutionPolicy::deny_write()
+                ExecutionPolicy::allow_capabilities(allow_capability)
             };
             let report = Runner::with_environment_and_policy(
                 ExecutionLimits::default(),
