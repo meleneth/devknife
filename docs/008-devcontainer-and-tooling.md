@@ -57,7 +57,9 @@ Useful frontend checks:
 - `npm --prefix apps/desktop run dev:web`
 - `npm --prefix apps/desktop run dev:tauri`
 
-On Linux, Tauri requires native WebKit/GTK development packages. The current environment is missing `gdk-3.0.pc`, which blocks `cargo check` for the Tauri crate until the Linux prerequisites are installed. For Debian/Ubuntu-style systems, Tauri documents:
+On Linux, Tauri requires native WebKit/GTK development packages. If `cargo check` reports missing
+`pkg-config`, D-Bus, GTK, or WebKit packages, install the platform prerequisites before building.
+For Debian/Ubuntu-style systems, Tauri documents:
 
 ```sh
 sudo apt update
