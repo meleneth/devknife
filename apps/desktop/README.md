@@ -46,5 +46,7 @@ Active runs lock workflow, environment, source, and history selection; returned 
 only to the exact workflow/environment request that produced them.
 Persisted history and report reads use latest-request-wins ordering, and history failures include an
 inline retry instead of silently appearing empty.
+Artifact discovery isolates invalid YAML files: valid workflows and environments remain listed,
+invalid workflows stay editable, and per-file validation errors are shown in place.
 
 On Linux, Tauri requires WebKit/GTK development packages. See `../../docs/008-devcontainer-and-tooling.md`.

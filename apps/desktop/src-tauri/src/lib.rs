@@ -17,6 +17,8 @@ struct WorkflowSummary {
     name: String,
     version: String,
     path: String,
+    valid: bool,
+    validation_error: Option<String>,
     seed_event_count: usize,
     handler_count: usize,
     effect_count: usize,
@@ -28,6 +30,8 @@ struct WorkflowSummary {
 struct EnvironmentSummary {
     name: String,
     path: String,
+    valid: bool,
+    validation_error: Option<String>,
     service_count: usize,
     value_count: usize,
     secret_count: usize,
@@ -68,17 +72,7 @@ fn list_workflows() -> Result<Vec<WorkflowSummary>, String> {
             continue;
         }
 
-        let workflow = read_workflow(&path)?;
-        let plan = plan_workflow(&workflow);
-        workflows.push(WorkflowSummary {
-            name: workflow.name,
-            version: workflow.version,
-            path: path_to_ui(&root, &path),
-            seed_event_count: workflow.seed_events.len(),
-            handler_count: workflow.handlers.len(),
-            effect_count: plan.effects.len(),
-            capability_count: plan.required_capabilities.len(),
-        });
+        workflows.push(summarize_workflow(&root, &path));
     }
 
     workflows.sort_by(|left, right| left.name.cmp(&right.name));
@@ -103,19 +97,7 @@ fn list_environments() -> Result<Vec<EnvironmentSummary>, String> {
             continue;
         }
 
-        let environment = read_environment_file(&path)?;
-        environments.push(EnvironmentSummary {
-            name: environment.name.unwrap_or_else(|| {
-                path.file_stem()
-                    .and_then(|value| value.to_str())
-                    .unwrap_or("environment")
-                    .to_string()
-            }),
-            path: path_to_ui(&root, &path),
-            service_count: environment.services.len(),
-            value_count: environment.values.len(),
-            secret_count: environment.secret_refs.len(),
-        });
+        environments.push(summarize_environment(&root, &path));
     }
 
     environments.sort_by(|left, right| left.name.cmp(&right.name));
@@ -341,6 +323,63 @@ fn read_environment_file(path: &Path) -> Result<RuntimeEnvironment, String> {
     load_environment_yaml(&contents).map_err(|error| error.to_string())
 }
 
+fn summarize_workflow(root: &Path, path: &Path) -> WorkflowSummary {
+    let ui_path = path_to_ui(root, path);
+    match read_workflow(path) {
+        Ok(workflow) => {
+            let plan = plan_workflow(&workflow);
+            WorkflowSummary {
+                name: workflow.name,
+                version: workflow.version,
+                path: ui_path,
+                valid: true,
+                validation_error: None,
+                seed_event_count: workflow.seed_events.len(),
+                handler_count: workflow.handlers.len(),
+                effect_count: plan.effects.len(),
+                capability_count: plan.required_capabilities.len(),
+            }
+        }
+        Err(error) => WorkflowSummary {
+            name: artifact_name(path, "workflow"),
+            version: "invalid".to_string(),
+            path: ui_path,
+            valid: false,
+            validation_error: Some(error),
+            seed_event_count: 0,
+            handler_count: 0,
+            effect_count: 0,
+            capability_count: 0,
+        },
+    }
+}
+
+fn summarize_environment(root: &Path, path: &Path) -> EnvironmentSummary {
+    let ui_path = path_to_ui(root, path);
+    match read_environment_file(path) {
+        Ok(environment) => EnvironmentSummary {
+            name: environment
+                .name
+                .unwrap_or_else(|| artifact_name(path, "environment")),
+            path: ui_path,
+            valid: true,
+            validation_error: None,
+            service_count: environment.services.len(),
+            value_count: environment.values.len(),
+            secret_count: environment.secret_refs.len(),
+        },
+        Err(error) => EnvironmentSummary {
+            name: artifact_name(path, "environment"),
+            path: ui_path,
+            valid: false,
+            validation_error: Some(error),
+            service_count: 0,
+            value_count: 0,
+            secret_count: 0,
+        },
+    }
+}
+
 fn write_run_report(root: &Path, report: &RunReport) -> Result<(), String> {
     let run_dir = root.join("runs");
     fs::create_dir_all(&run_dir).map_err(|error| {
@@ -521,11 +560,20 @@ fn path_to_ui(root: &Path, path: &Path) -> String {
         .to_string()
 }
 
+fn artifact_name(path: &Path, fallback: &str) -> String {
+    path.file_stem()
+        .and_then(|value| value.to_str())
+        .unwrap_or(fallback)
+        .to_string()
+}
+
 #[cfg(test)]
 mod tests {
     use std::{fs, time::SystemTime};
 
-    use super::{replace_file_safely, validate_workflow_source};
+    use super::{
+        replace_file_safely, summarize_environment, summarize_workflow, validate_workflow_source,
+    };
 
     #[test]
     fn workflow_validation_reports_yaml_locations() {
@@ -545,6 +593,35 @@ mod tests {
         assert_eq!(result.kind, Some("semantic"));
         assert!(result.message.contains("workflow name is required"));
         assert_eq!(result.line, None);
+    }
+
+    #[test]
+    fn invalid_artifacts_produce_error_summaries() {
+        let unique = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .expect("time after epoch")
+            .as_nanos();
+        let directory = std::env::temp_dir().join(format!(
+            "devknife-invalid-artifacts-{}-{unique}",
+            std::process::id()
+        ));
+        fs::create_dir(&directory).expect("create test directory");
+        let workflow_path = directory.join("broken.workflow.yaml");
+        let environment_path = directory.join("broken.environment.yaml");
+        fs::write(&workflow_path, "name: [").expect("write invalid workflow");
+        fs::write(&environment_path, "services: [").expect("write invalid environment");
+
+        let workflow = summarize_workflow(&directory, &workflow_path);
+        let environment = summarize_environment(&directory, &environment_path);
+
+        assert!(!workflow.valid);
+        assert_eq!(workflow.name, "broken.workflow");
+        assert!(workflow.validation_error.is_some());
+        assert!(!environment.valid);
+        assert_eq!(environment.name, "broken.environment");
+        assert!(environment.validation_error.is_some());
+
+        fs::remove_dir_all(&directory).expect("remove test directory");
     }
 
     #[test]

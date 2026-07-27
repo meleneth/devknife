@@ -53,6 +53,8 @@ interface WorkflowSummary {
   name: string
   version: string
   path: string
+  valid: boolean
+  validationError: string | null
   seedEventCount: number
   handlerCount: number
   effectCount: number
@@ -62,6 +64,8 @@ interface WorkflowSummary {
 interface EnvironmentSummary {
   name: string
   path: string
+  valid: boolean
+  validationError: string | null
   serviceCount: number
   valueCount: number
   secretCount: number
@@ -406,7 +410,7 @@ async function saveSource() {
     savedWorkflowSource.value = source
     sourceStatus.value = 'Saved and validated.'
     sourceValidation.value = null
-    await loadPlan()
+    await refreshWorkflows()
   } catch (cause) {
     if (
       selectedPath.value !== workflowPath ||
@@ -626,7 +630,13 @@ function traceDetail(entry: TraceEntry) {
                 v-for="workflow in workflows"
                 :key="workflow.path"
                 class="mb-3 w-full border-2 border-black bg-white p-3 text-left shadow-[4px_4px_0_#000] transition-transform hover:-translate-y-0.5"
-                :class="workflow.path === selectedPath ? 'bg-[#d9f99d]' : ''"
+                :class="
+                  !workflow.valid
+                    ? 'bg-[#fecaca]'
+                    : workflow.path === selectedPath
+                      ? 'bg-[#d9f99d]'
+                      : ''
+                "
                 :disabled="loading || validating || saving || running"
                 @click="selectWorkflow(workflow.path)"
               >
@@ -635,11 +645,17 @@ function traceDetail(entry: TraceEntry) {
                     {{ workflow.name }}
                   </span>
                   <Badge class="border-2 border-black bg-[#6ee7f9] text-black">
-                    {{ workflow.effectCount }}
+                    {{ workflow.valid ? workflow.effectCount : 'invalid' }}
                   </Badge>
                 </div>
                 <p class="mb-2 break-words font-mono text-[11px] text-neutral-700">
                   {{ workflow.path }}
+                </p>
+                <p
+                  v-if="workflow.validationError"
+                  class="mb-2 line-clamp-3 text-xs font-bold text-red-900"
+                >
+                  {{ workflow.validationError }}
                 </p>
                 <div class="flex gap-2 text-[11px] font-bold text-neutral-800">
                   <span>{{ workflow.seedEventCount }} seeds</span>
@@ -971,7 +987,7 @@ function traceDetail(entry: TraceEntry) {
                       :key="environment.path"
                       :value="environment.path"
                     >
-                      {{ environment.name }}
+                      {{ environment.name }}{{ environment.valid ? '' : ' (invalid)' }}
                     </option>
                   </select>
                   <div
@@ -993,8 +1009,15 @@ function traceDetail(entry: TraceEntry) {
                       Retry
                     </Button>
                   </div>
+                  <div
+                    v-if="selectedEnvironment?.validationError"
+                    class="flex items-start gap-2 border-2 border-black bg-[#fecaca] p-2 text-xs font-bold"
+                  >
+                    <AlertCircle class="mt-0.5 size-4 shrink-0" />
+                    <span>{{ selectedEnvironment.validationError }}</span>
+                  </div>
                   <p
-                    v-if="selectedEnvironment"
+                    v-if="selectedEnvironment?.valid"
                     class="font-mono text-xs font-semibold text-neutral-800"
                   >
                     {{ selectedEnvironment.serviceCount }} services ·
