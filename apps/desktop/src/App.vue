@@ -133,6 +133,7 @@ const saving = ref(false)
 const error = ref('')
 const sourceStatus = ref('')
 const sourceValidation = ref<WorkflowValidation | null>(null)
+const environmentError = ref('')
 const activeTab = ref('plan')
 const traceQuery = ref('')
 const plannedWorkflowPath = ref('')
@@ -172,6 +173,7 @@ const sourceDirty = computed(
 const planReady = computed(
   () =>
     !sourceDirty.value &&
+    !environmentError.value &&
     selectedPlan.value !== null &&
     plannedWorkflowPath.value === selectedPath.value &&
     plannedEnvironmentPath.value === selectedEnvironmentPath.value,
@@ -238,6 +240,8 @@ async function refreshWorkflows() {
 
 async function refreshEnvironments() {
   const previousPath = selectedEnvironmentPath.value
+  beginLoading()
+  environmentError.value = ''
   try {
     environments.value =
       await invoke<EnvironmentSummary[]>('list_environments')
@@ -246,9 +250,12 @@ async function refreshEnvironments() {
     )
       ? previousPath
       : (environments.value[0]?.path ?? '')
-  } catch {
+  } catch (cause) {
     environments.value = []
     selectedEnvironmentPath.value = ''
+    environmentError.value = `Unable to load environments. ${String(cause)}`
+  } finally {
+    endLoading()
   }
 }
 
@@ -566,7 +573,9 @@ name: ${workflow?.name ?? 'cross-protocol-smoke'}
               <Button
                 variant="outline"
                 class="border-2 border-black bg-[#6ee7f9] text-black shadow-[3px_3px_0_#000]"
-                :disabled="loading || !selectedPath || sourceDirty"
+                :disabled="
+                  loading || !selectedPath || sourceDirty || !!environmentError
+                "
                 @click="loadPlan"
               >
                 <Route class="size-4" />
@@ -848,6 +857,25 @@ name: ${workflow?.name ?? 'cross-protocol-smoke'}
                       {{ environment.name }}
                     </option>
                   </select>
+                  <div
+                    v-if="environmentError"
+                    class="border-2 border-black bg-[#fecaca] p-2 text-xs font-bold"
+                  >
+                    <div class="mb-2 flex items-start gap-2">
+                      <AlertCircle class="mt-0.5 size-4 shrink-0" />
+                      <span>{{ environmentError }}</span>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      class="border-2 border-black bg-white"
+                      :disabled="loading"
+                      @click="refreshEnvironments"
+                    >
+                      <RefreshCw class="size-3" />
+                      Retry
+                    </Button>
+                  </div>
                   <p
                     v-if="selectedEnvironment"
                     class="font-mono text-xs font-semibold text-neutral-800"
