@@ -203,6 +203,7 @@ function preventUnsavedClose(event: BeforeUnloadEvent) {
 async function refreshWorkflows() {
   if (!confirmDiscardChanges()) return
 
+  const previousPath = selectedPath.value
   loading.value = true
   error.value = ''
   try {
@@ -214,17 +215,26 @@ async function refreshWorkflows() {
     loading.value = false
   }
 
-  selectedPath.value = workflows.value[0]?.path ?? ''
+  selectedPath.value = workflows.value.some(
+    (workflow) => workflow.path === previousPath,
+  )
+    ? previousPath
+    : (workflows.value[0]?.path ?? '')
   if (selectedPath.value) {
     await loadWorkflow()
   }
 }
 
 async function refreshEnvironments() {
+  const previousPath = selectedEnvironmentPath.value
   try {
     environments.value =
       await invoke<EnvironmentSummary[]>('list_environments')
-    selectedEnvironmentPath.value = environments.value[0]?.path ?? ''
+    selectedEnvironmentPath.value = environments.value.some(
+      (environment) => environment.path === previousPath,
+    )
+      ? previousPath
+      : (environments.value[0]?.path ?? '')
   } catch {
     environments.value = []
     selectedEnvironmentPath.value = ''
