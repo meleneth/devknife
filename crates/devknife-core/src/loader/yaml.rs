@@ -67,18 +67,32 @@ pub fn validate_workflow_environment(
 
     for handler in &workflow.handlers {
         for effect in &handler.effects {
-            let service = match effect {
-                Effect::Rest(effect) => effect.service.as_deref(),
-                Effect::Graphql(effect) => effect.service.as_deref(),
-                Effect::SnsPublish(effect) => effect.service.as_deref(),
-                Effect::SqsSend(effect) => effect.service.as_deref(),
-                Effect::SqsReceive(effect) => effect.service.as_deref(),
-                Effect::Websocket(effect) => effect.service.as_deref(),
-                Effect::Emit { .. } | Effect::Record { .. } | Effect::Assert(_) => None,
+            let (service, scheme) = match effect {
+                Effect::Rest(effect) => (effect.service.as_deref(), Some("http://")),
+                Effect::Graphql(effect) => (effect.service.as_deref(), Some("http://")),
+                Effect::SnsPublish(effect) => (effect.service.as_deref(), Some("http://")),
+                Effect::SqsSend(effect) => (effect.service.as_deref(), Some("http://")),
+                Effect::SqsReceive(effect) => (effect.service.as_deref(), Some("http://")),
+                Effect::Websocket(effect) => (effect.service.as_deref(), Some("ws://")),
+                Effect::Emit { .. } | Effect::Record { .. } | Effect::Assert(_) => (None, None),
             };
             if let Some(service) = service {
-                if !environment.services.contains_key(service) {
-                    missing.insert(format!("service '{service}'"));
+                match environment.services.get(service) {
+                    None => {
+                        missing.insert(format!("service '{service}'"));
+                    }
+                    Some(binding)
+                        if scheme.is_some_and(|scheme| {
+                            !binding.base_url.contains("{{")
+                                && !binding.base_url.starts_with(scheme)
+                        }) =>
+                    {
+                        missing.insert(format!(
+                            "service '{service}' must use {}",
+                            scheme.expect("checked scheme")
+                        ));
+                    }
+                    Some(_) => {}
                 }
             }
         }
@@ -91,7 +105,7 @@ pub fn validate_workflow_environment(
         Ok(())
     } else {
         Err(LoadError::Validation(format!(
-            "missing environment bindings: {}",
+            "environment binding errors: {}",
             missing.into_iter().collect::<Vec<_>>().join(", ")
         )))
     }
@@ -286,6 +300,13 @@ fn validate_effect(
                     "handlers[{handler_index}].effects[{effect_index}].path is required"
                 )));
             }
+            validate_literal_url(
+                rest.base_url.as_deref(),
+                "http://",
+                handler_index,
+                effect_index,
+                "base_url",
+            )?;
             if rest
                 .expect
                 .status
@@ -328,6 +349,13 @@ fn validate_effect(
                     "handlers[{handler_index}].effects[{effect_index}].query is required"
                 )));
             }
+            validate_literal_url(
+                graphql.base_url.as_deref(),
+                "http://",
+                handler_index,
+                effect_index,
+                "base_url",
+            )?;
             if graphql
                 .expect
                 .status
@@ -354,6 +382,13 @@ fn validate_effect(
                 handler_index,
                 effect_index,
             )?;
+            validate_literal_url(
+                sns.endpoint_url.as_deref(),
+                "http://",
+                handler_index,
+                effect_index,
+                "endpoint_url",
+            )?;
             if sns.topic_arn.trim().is_empty() {
                 return Err(LoadError::Validation(format!(
                     "handlers[{handler_index}].effects[{effect_index}].topic_arn is required"
@@ -376,6 +411,13 @@ fn validate_effect(
                 handler_index,
                 effect_index,
             )?;
+            validate_literal_url(
+                sqs.endpoint_url.as_deref(),
+                "http://",
+                handler_index,
+                effect_index,
+                "endpoint_url",
+            )?;
             if sqs.queue_url.trim().is_empty() {
                 return Err(LoadError::Validation(format!(
                     "handlers[{handler_index}].effects[{effect_index}].queue_url is required"
@@ -397,6 +439,13 @@ fn validate_effect(
                 sqs.endpoint_url.as_deref(),
                 handler_index,
                 effect_index,
+            )?;
+            validate_literal_url(
+                sqs.endpoint_url.as_deref(),
+                "http://",
+                handler_index,
+                effect_index,
+                "endpoint_url",
             )?;
             if sqs.queue_url.trim().is_empty() {
                 return Err(LoadError::Validation(format!(
@@ -446,6 +495,13 @@ fn validate_effect(
                     "handlers[{handler_index}].effects[{effect_index}].timeout_ms must be greater than 0"
                 )));
             }
+            validate_literal_url(
+                websocket.url.as_deref(),
+                "ws://",
+                handler_index,
+                effect_index,
+                "url",
+            )?;
             for path in websocket.expect.json.keys() {
                 jsonpath_rfc9535::JsonPath::parse(path).map_err(|error| {
                     LoadError::Validation(format!(
@@ -465,6 +521,23 @@ fn validate_effect(
         }
         Effect::Emit { .. } | Effect::Record { .. } | Effect::Assert(_) => Ok(()),
     }
+}
+
+fn validate_literal_url(
+    value: Option<&str>,
+    required_scheme: &str,
+    handler_index: usize,
+    effect_index: usize,
+    field: &str,
+) -> Result<(), LoadError> {
+    if let Some(value) = value {
+        if !value.contains("{{") && !value.starts_with(required_scheme) {
+            return Err(LoadError::Validation(format!(
+                "handlers[{handler_index}].effects[{effect_index}].{field} must use {required_scheme}"
+            )));
+        }
+    }
+    Ok(())
 }
 
 fn validate_aws_binding(

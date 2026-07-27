@@ -392,6 +392,72 @@ handlers:
 }
 
 #[test]
+fn workflow_validation_rejects_unsupported_literal_url_schemes() {
+    let rest = devknife_core::load_workflow_yaml(
+        r#"
+name: unsupported-rest-scheme
+handlers:
+  - on: workflow.started
+    effects:
+      - type: rest
+        base_url: https://example.test
+        method: GET
+        path: /health
+"#,
+    )
+    .expect_err("HTTPS is not supported yet")
+    .to_string();
+    assert!(rest.contains("base_url must use http://"));
+
+    let websocket = devknife_core::load_workflow_yaml(
+        r#"
+name: unsupported-websocket-scheme
+handlers:
+  - on: workflow.started
+    effects:
+      - type: websocket
+        url: wss://example.test/ws
+        send:
+          text: ping
+"#,
+    )
+    .expect_err("WSS is not supported yet")
+    .to_string();
+    assert!(websocket.contains("url must use ws://"));
+}
+
+#[test]
+fn workflow_environment_preflight_validates_service_schemes() {
+    let workflow = devknife_core::load_workflow_yaml(
+        r#"
+name: websocket-service-scheme
+handlers:
+  - on: workflow.started
+    effects:
+      - type: websocket
+        service: websocket
+        send:
+          text: ping
+"#,
+    )
+    .expect("workflow parses");
+    let environment = RuntimeEnvironment {
+        services: BTreeMap::from([(
+            "websocket".to_string(),
+            ServiceBinding {
+                base_url: "http://localhost:18103/ws".to_string(),
+            },
+        )]),
+        ..RuntimeEnvironment::default()
+    };
+
+    let error = devknife_core::validate_workflow_environment(&workflow, &environment)
+        .expect_err("wrong service scheme must fail")
+        .to_string();
+    assert!(error.contains("service 'websocket' must use ws://"));
+}
+
+#[test]
 fn environment_loader_rejects_unknown_fields() {
     let unknown_section = devknife_core::load_environment_yaml(
         r#"

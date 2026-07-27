@@ -96,6 +96,8 @@ Current implementation supports:
 Workflow validation enforces SQS request limits (`max_messages` 1–10 and
 `wait_time_seconds` 0–20) before execution. REST and GraphQL expected HTTP statuses must be in the
 100–599 range.
+Literal URLs and selected service bindings are also checked against the currently supported
+schemes: `http://` for REST, GraphQL, SNS, and SQS; `ws://` for WebSocket.
 - typed observations for publish/send/receive and received message metadata
 - parsing JSON SQS bodies and GoAWS SNS notification envelopes
 - convenience extraction from `$.message.body_message_json.*` when an SNS notification `Message` field contains JSON
