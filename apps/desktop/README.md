@@ -50,5 +50,6 @@ Artifact discovery isolates invalid YAML files: valid workflows and environments
 invalid workflows stay editable, and per-file validation errors are shown in place.
 Automatic selection prefers a valid artifact while preserving any explicit selection that still
 exists.
+Desktop discovery and repository path guards accept both `.yaml` and `.yml` artifacts.
 
 On Linux, Tauri requires WebKit/GTK development packages. See `../../docs/008-devcontainer-and-tooling.md`.

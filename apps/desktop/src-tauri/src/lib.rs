@@ -68,7 +68,7 @@ fn list_workflows() -> Result<Vec<WorkflowSummary>, String> {
     {
         let entry = entry.map_err(|error| error.to_string())?;
         let path = entry.path();
-        if path.extension().and_then(|value| value.to_str()) != Some("yaml") {
+        if !is_yaml_path(&path) {
             continue;
         }
 
@@ -93,7 +93,7 @@ fn list_environments() -> Result<Vec<EnvironmentSummary>, String> {
     {
         let entry = entry.map_err(|error| error.to_string())?;
         let path = entry.path();
-        if path.extension().and_then(|value| value.to_str()) != Some("yaml") {
+        if !is_yaml_path(&path) {
             continue;
         }
 
@@ -528,9 +528,7 @@ fn resolve_workflow_path(root: &Path, path: &str) -> Result<PathBuf, String> {
         .canonicalize()
         .map_err(|error| format!("failed to resolve workflow directory: {error}"))?;
 
-    if !candidate.starts_with(&workflow_dir)
-        || candidate.extension().and_then(|value| value.to_str()) != Some("yaml")
-    {
+    if !candidate.starts_with(&workflow_dir) || !is_yaml_path(&candidate) {
         return Err("workflow source path must be a YAML file in examples/workflows".to_string());
     }
 
@@ -544,9 +542,7 @@ fn resolve_environment_path(root: &Path, path: &str) -> Result<PathBuf, String> 
         .canonicalize()
         .map_err(|error| format!("failed to resolve environment directory: {error}"))?;
 
-    if !candidate.starts_with(&environment_dir)
-        || candidate.extension().and_then(|value| value.to_str()) != Some("yaml")
-    {
+    if !candidate.starts_with(&environment_dir) || !is_yaml_path(&candidate) {
         return Err("environment path must be a YAML file in examples/environments".to_string());
     }
 
@@ -558,6 +554,13 @@ fn path_to_ui(root: &Path, path: &Path) -> String {
         .unwrap_or(path)
         .to_string_lossy()
         .to_string()
+}
+
+fn is_yaml_path(path: &Path) -> bool {
+    matches!(
+        path.extension().and_then(|value| value.to_str()),
+        Some("yaml" | "yml")
+    )
 }
 
 fn artifact_name(path: &Path, fallback: &str) -> String {
@@ -572,7 +575,8 @@ mod tests {
     use std::{fs, time::SystemTime};
 
     use super::{
-        replace_file_safely, summarize_environment, summarize_workflow, validate_workflow_source,
+        replace_file_safely, resolve_environment_path, resolve_workflow_path,
+        summarize_environment, summarize_workflow, validate_workflow_source,
     };
 
     #[test]
@@ -622,6 +626,42 @@ mod tests {
         assert!(environment.validation_error.is_some());
 
         fs::remove_dir_all(&directory).expect("remove test directory");
+    }
+
+    #[test]
+    fn repository_path_guards_accept_yaml_extensions() {
+        let unique = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .expect("time after epoch")
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!(
+            "devknife-yaml-paths-{}-{unique}",
+            std::process::id()
+        ));
+        let workflow_dir = root.join("examples/workflows");
+        let environment_dir = root.join("examples/environments");
+        fs::create_dir_all(&workflow_dir).expect("create workflow directory");
+        fs::create_dir_all(&environment_dir).expect("create environment directory");
+        let workflow = workflow_dir.join("workflow.yml");
+        let environment = environment_dir.join("environment.yaml");
+        let rejected = workflow_dir.join("workflow.json");
+        fs::write(&workflow, "name: workflow\n").expect("write workflow");
+        fs::write(&environment, "name: environment\n").expect("write environment");
+        fs::write(&rejected, "{}").expect("write rejected artifact");
+
+        assert_eq!(
+            resolve_workflow_path(&root, "examples/workflows/workflow.yml")
+                .expect("resolve yml workflow"),
+            workflow
+        );
+        assert_eq!(
+            resolve_environment_path(&root, "examples/environments/environment.yaml")
+                .expect("resolve yaml environment"),
+            environment
+        );
+        assert!(resolve_workflow_path(&root, "examples/workflows/workflow.json").is_err());
+
+        fs::remove_dir_all(&root).expect("remove test directory");
     }
 
     #[test]
