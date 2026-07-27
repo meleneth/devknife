@@ -64,10 +64,48 @@ fn plan_workflow_file(path: String) -> Result<RunPlan, String> {
 #[tauri::command]
 fn read_workflow_source(path: String) -> Result<String, String> {
     let root = repo_root()?;
-    let workflow_path = resolve_repo_path(&root, &path)?;
+    let workflow_path = resolve_workflow_path(&root, &path)?;
     fs::read_to_string(&workflow_path).map_err(|error| {
         format!(
             "failed to read workflow source {}: {error}",
+            workflow_path.display()
+        )
+    })
+}
+
+#[tauri::command]
+fn validate_workflow_source(source: String) -> Result<(), String> {
+    load_workflow_yaml(&source)
+        .map(|_| ())
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn save_workflow_source(
+    path: String,
+    source: String,
+    expected_source: String,
+) -> Result<(), String> {
+    load_workflow_yaml(&source).map_err(|error| error.to_string())?;
+
+    let root = repo_root()?;
+    let workflow_path = resolve_workflow_path(&root, &path)?;
+    let current_source = fs::read_to_string(&workflow_path).map_err(|error| {
+        format!(
+            "failed to read workflow source {} before saving: {error}",
+            workflow_path.display()
+        )
+    })?;
+
+    if current_source != expected_source {
+        return Err(
+            "workflow changed on disk since it was loaded; reload before saving".to_string(),
+        );
+    }
+
+    fs::write(&workflow_path, source).map_err(|error| {
+        format!(
+            "failed to save workflow source {}: {error}",
             workflow_path.display()
         )
     })
@@ -100,6 +138,8 @@ pub fn run() {
             list_workflows,
             plan_workflow_file,
             read_workflow_source,
+            save_workflow_source,
+            validate_workflow_source,
             run_workflow_file
         ])
         .run(tauri::generate_context!())
@@ -149,6 +189,22 @@ fn resolve_repo_path(root: &Path, path: &str) -> Result<PathBuf, String> {
 
     if !candidate.starts_with(&root) {
         return Err("workflow path must stay inside the repository".to_string());
+    }
+
+    Ok(candidate)
+}
+
+fn resolve_workflow_path(root: &Path, path: &str) -> Result<PathBuf, String> {
+    let candidate = resolve_repo_path(root, path)?;
+    let workflow_dir = root
+        .join("examples/workflows")
+        .canonicalize()
+        .map_err(|error| format!("failed to resolve workflow directory: {error}"))?;
+
+    if !candidate.starts_with(&workflow_dir)
+        || candidate.extension().and_then(|value| value.to_str()) != Some("yaml")
+    {
+        return Err("workflow source path must be a YAML file in examples/workflows".to_string());
     }
 
     Ok(candidate)

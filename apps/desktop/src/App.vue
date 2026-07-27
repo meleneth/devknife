@@ -10,7 +10,9 @@ import {
   GitBranch,
   Play,
   RefreshCw,
+  RotateCcw,
   Route,
+  Save,
   ShieldCheck,
   Terminal,
 } from '@lucide/vue'
@@ -93,10 +95,13 @@ const workflows = ref<WorkflowSummary[]>([])
 const selectedPath = ref('')
 const selectedPlan = ref<RunPlan | null>(null)
 const workflowSource = ref('')
+const savedWorkflowSource = ref('')
 const runReport = ref<RunReport | null>(null)
 const loading = ref(false)
 const running = ref(false)
+const saving = ref(false)
 const error = ref('')
+const sourceStatus = ref('')
 
 const selectedWorkflow = computed(() =>
   workflows.value.find((workflow) => workflow.path === selectedPath.value),
@@ -110,12 +115,17 @@ const mutatingCapabilities = computed(
 )
 
 const traceRows = computed(() => runReport.value?.trace ?? [])
+const sourceDirty = computed(
+  () => workflowSource.value !== savedWorkflowSource.value,
+)
 
 onMounted(() => {
   void refreshWorkflows()
 })
 
 async function refreshWorkflows() {
+  if (!confirmDiscardChanges()) return
+
   loading.value = true
   error.value = ''
   try {
@@ -134,6 +144,8 @@ async function refreshWorkflows() {
 }
 
 async function selectWorkflow(path: string) {
+  if (path === selectedPath.value || !confirmDiscardChanges()) return
+
   selectedPath.value = path
   runReport.value = null
   await loadWorkflow()
@@ -167,9 +179,62 @@ async function loadSource() {
     workflowSource.value = await invoke<string>('read_workflow_source', {
       path: selectedPath.value,
     })
+    savedWorkflowSource.value = workflowSource.value
+    sourceStatus.value = ''
   } catch {
     workflowSource.value = fallbackSource(selectedWorkflow.value)
+    savedWorkflowSource.value = workflowSource.value
   }
+}
+
+async function validateSource() {
+  sourceStatus.value = ''
+  error.value = ''
+  try {
+    await invoke<void>('validate_workflow_source', {
+      source: workflowSource.value,
+    })
+    sourceStatus.value = 'Workflow is valid.'
+    return true
+  } catch (cause) {
+    error.value = `Workflow validation failed. ${String(cause)}`
+    return false
+  }
+}
+
+async function saveSource() {
+  if (!selectedPath.value || !sourceDirty.value) return
+
+  saving.value = true
+  sourceStatus.value = ''
+  error.value = ''
+  try {
+    await invoke<void>('save_workflow_source', {
+      path: selectedPath.value,
+      source: workflowSource.value,
+      expectedSource: savedWorkflowSource.value,
+    })
+    savedWorkflowSource.value = workflowSource.value
+    sourceStatus.value = 'Saved and validated.'
+    await loadPlan()
+  } catch (cause) {
+    error.value = `Unable to save workflow. ${String(cause)}`
+  } finally {
+    saving.value = false
+  }
+}
+
+function discardSourceChanges() {
+  workflowSource.value = savedWorkflowSource.value
+  sourceStatus.value = ''
+  error.value = ''
+}
+
+function confirmDiscardChanges() {
+  return (
+    !sourceDirty.value ||
+    window.confirm('Discard your unsaved workflow changes?')
+  )
 }
 
 async function runSelectedWorkflow() {
@@ -473,18 +538,55 @@ name: ${workflow?.name ?? 'cross-protocol-smoke'}
                 <TabsContent value="source">
                   <Card class="border-4 border-black bg-white shadow-[6px_6px_0_#000]">
                     <CardHeader>
-                      <CardTitle class="flex items-center gap-2 text-lg font-black">
-                        <Code2 class="size-5" />
-                        Workflow source
-                      </CardTitle>
-                      <CardDescription>
-                        Read-only YAML loaded from {{ selectedPath }}.
-                      </CardDescription>
+                      <div class="flex items-start justify-between gap-4">
+                        <div>
+                          <CardTitle class="flex items-center gap-2 text-lg font-black">
+                            <Code2 class="size-5" />
+                            Workflow source
+                          </CardTitle>
+                          <CardDescription>
+                            Edit and validate {{ selectedPath }}.
+                          </CardDescription>
+                        </div>
+                        <div class="flex shrink-0 gap-2">
+                          <Button
+                            variant="outline"
+                            class="border-2 border-black bg-white text-black shadow-[2px_2px_0_#000]"
+                            :disabled="saving || !sourceDirty"
+                            @click="discardSourceChanges"
+                          >
+                            <RotateCcw class="size-4" />
+                            Revert
+                          </Button>
+                          <Button
+                            variant="outline"
+                            class="border-2 border-black bg-[#6ee7f9] text-black shadow-[2px_2px_0_#000]"
+                            :disabled="saving || !workflowSource"
+                            @click="validateSource"
+                          >
+                            <ShieldCheck class="size-4" />
+                            Validate
+                          </Button>
+                          <Button
+                            class="border-2 border-black bg-[#ff5c8a] text-black shadow-[2px_2px_0_#000]"
+                            :disabled="saving || !sourceDirty"
+                            @click="saveSource"
+                          >
+                            <Save class="size-4" />
+                            {{ saving ? 'Saving…' : 'Save' }}
+                          </Button>
+                        </div>
+                      </div>
                     </CardHeader>
                     <CardContent>
+                      <div
+                        v-if="sourceStatus"
+                        class="mb-3 border-2 border-black bg-[#d9f99d] px-3 py-2 text-sm font-bold"
+                      >
+                        {{ sourceStatus }}
+                      </div>
                       <Textarea
-                        :model-value="workflowSource"
-                        readonly
+                        v-model="workflowSource"
                         spellcheck="false"
                         aria-label="Workflow YAML source"
                         class="min-h-[520px] resize-none border-2 border-black bg-neutral-950 p-4 font-mono text-xs leading-5 text-lime-200"
