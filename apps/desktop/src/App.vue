@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import {
   AlertCircle,
@@ -153,9 +153,21 @@ const sourceDirty = computed(
 )
 
 onMounted(() => {
+  window.addEventListener('beforeunload', preventUnsavedClose)
   void refreshWorkflows()
   void refreshRunHistory()
 })
+
+onBeforeUnmount(() => {
+  window.removeEventListener('beforeunload', preventUnsavedClose)
+})
+
+function preventUnsavedClose(event: BeforeUnloadEvent) {
+  if (!sourceDirty.value) return
+
+  event.preventDefault()
+  event.returnValue = ''
+}
 
 async function refreshWorkflows() {
   if (!confirmDiscardChanges()) return
