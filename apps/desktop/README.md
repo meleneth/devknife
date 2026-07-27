@@ -21,5 +21,6 @@ Desktop runs that request write-capable effects require explicit confirmation be
 Completed runs open their trace automatically, with free-text filtering across event, effect, and
 payload details.
 Desktop runs persist the same `runs/<run_id>.trace.json` artifacts as CLI runs.
+The recent-runs panel can reopen persisted CLI or desktop reports in the trace inspector.
 
 On Linux, Tauri requires WebKit/GTK development packages. See `../../docs/008-devcontainer-and-tooling.md`.

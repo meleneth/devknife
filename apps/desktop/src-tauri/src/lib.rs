@@ -21,6 +21,16 @@ struct WorkflowSummary {
     capability_count: usize,
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RunSummary {
+    run_id: String,
+    workflow_name: String,
+    status: devknife_core::RunStatus,
+    trace_entry_count: usize,
+    modified_at_unix_ms: u128,
+}
+
 #[tauri::command]
 fn list_workflows() -> Result<Vec<WorkflowSummary>, String> {
     let root = repo_root()?;
@@ -123,6 +133,75 @@ fn run_workflow_file(path: String) -> Result<RunReport, String> {
     Ok(report)
 }
 
+#[tauri::command]
+fn list_run_reports() -> Result<Vec<RunSummary>, String> {
+    let root = repo_root()?;
+    let run_dir = root.join("runs");
+    if !run_dir.exists() {
+        return Ok(Vec::new());
+    }
+
+    let mut reports = fs::read_dir(&run_dir)
+        .map_err(|error| {
+            format!(
+                "failed to read run directory {}: {error}",
+                run_dir.display()
+            )
+        })?
+        .filter_map(|entry| entry.ok())
+        .filter_map(|entry| {
+            let path = entry.path();
+            if !path
+                .file_name()
+                .and_then(|value| value.to_str())
+                .is_some_and(|value| value.ends_with(".trace.json"))
+            {
+                return None;
+            }
+
+            let report: RunReport = serde_json::from_str(&fs::read_to_string(&path).ok()?).ok()?;
+            let modified_at_unix_ms = entry
+                .metadata()
+                .ok()?
+                .modified()
+                .ok()?
+                .duration_since(std::time::UNIX_EPOCH)
+                .ok()?
+                .as_millis();
+            Some(RunSummary {
+                run_id: report.run_id,
+                workflow_name: report.workflow_name,
+                status: report.status,
+                trace_entry_count: report.trace.len(),
+                modified_at_unix_ms,
+            })
+        })
+        .collect::<Vec<_>>();
+
+    reports.sort_by(|left, right| right.modified_at_unix_ms.cmp(&left.modified_at_unix_ms));
+    reports.truncate(20);
+    Ok(reports)
+}
+
+#[tauri::command]
+fn read_run_report(run_id: String) -> Result<RunReport, String> {
+    if run_id.is_empty()
+        || !run_id
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric() || character == '-')
+    {
+        return Err("invalid run id".to_string());
+    }
+
+    let path = repo_root()?
+        .join("runs")
+        .join(format!("{run_id}.trace.json"));
+    let contents = fs::read_to_string(&path)
+        .map_err(|error| format!("failed to read run report {}: {error}", path.display()))?;
+    serde_json::from_str(&contents)
+        .map_err(|error| format!("failed to parse run report {}: {error}", path.display()))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -142,7 +221,9 @@ pub fn run() {
             read_workflow_source,
             save_workflow_source,
             validate_workflow_source,
-            run_workflow_file
+            run_workflow_file,
+            list_run_reports,
+            read_run_report
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

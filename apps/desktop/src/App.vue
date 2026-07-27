@@ -8,6 +8,7 @@ import {
   Code2,
   FileText,
   GitBranch,
+  History,
   Play,
   RefreshCw,
   RotateCcw,
@@ -93,12 +94,21 @@ interface RunReport {
   failure: null | { trace_entry_id: string | null; message: string }
 }
 
+interface RunSummary {
+  runId: string
+  workflowName: string
+  status: 'succeeded' | 'failed'
+  traceEntryCount: number
+  modifiedAtUnixMs: number
+}
+
 const workflows = ref<WorkflowSummary[]>([])
 const selectedPath = ref('')
 const selectedPlan = ref<RunPlan | null>(null)
 const workflowSource = ref('')
 const savedWorkflowSource = ref('')
 const runReport = ref<RunReport | null>(null)
+const runHistory = ref<RunSummary[]>([])
 const loading = ref(false)
 const running = ref(false)
 const saving = ref(false)
@@ -135,6 +145,7 @@ const sourceDirty = computed(
 
 onMounted(() => {
   void refreshWorkflows()
+  void refreshRunHistory()
 })
 
 async function refreshWorkflows() {
@@ -276,11 +287,31 @@ async function runSelectedWorkflow() {
     runReport.value = await invoke<RunReport>('run_workflow_file', {
       path: selectedPath.value,
     })
+    await refreshRunHistory()
     activeTab.value = 'trace'
   } catch (cause) {
     error.value = `Run failed before the engine returned a report. ${String(cause)}`
   } finally {
     running.value = false
+  }
+}
+
+async function refreshRunHistory() {
+  try {
+    runHistory.value = await invoke<RunSummary[]>('list_run_reports')
+  } catch {
+    runHistory.value = []
+  }
+}
+
+async function loadRunReport(runId: string) {
+  error.value = ''
+  try {
+    runReport.value = await invoke<RunReport>('read_run_report', { runId })
+    traceQuery.value = ''
+    activeTab.value = 'trace'
+  } catch (cause) {
+    error.value = `Unable to load run report. ${String(cause)}`
   }
 }
 
@@ -767,6 +798,44 @@ name: ${workflow?.name ?? 'cross-protocol-smoke'}
                     </div>
                     <p v-if="mutatingCapabilities.length === 0" class="text-sm text-neutral-700">
                       No write-capable effects in this plan.
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card class="border-4 border-black bg-white shadow-[6px_6px_0_#000]">
+                <CardHeader>
+                  <CardTitle class="flex items-center gap-2 text-lg font-black">
+                    <History class="size-5" />
+                    Recent runs
+                  </CardTitle>
+                  <CardDescription>
+                    Persisted trace artifacts from CLI and desktop runs.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div class="space-y-2">
+                    <button
+                      v-for="run in runHistory"
+                      :key="run.runId"
+                      class="w-full border-2 border-black bg-[#fffdf4] p-3 text-left hover:bg-[#d9f99d]"
+                      @click="loadRunReport(run.runId)"
+                    >
+                      <div class="flex items-center justify-between gap-2">
+                        <p class="truncate text-sm font-black">{{ run.workflowName }}</p>
+                        <Badge
+                          class="border-2 border-black text-black"
+                          :class="run.status === 'succeeded' ? 'bg-[#d9f99d]' : 'bg-[#ffde59]'"
+                        >
+                          {{ run.status }}
+                        </Badge>
+                      </div>
+                      <p class="mt-1 truncate font-mono text-[11px] text-neutral-700">
+                        {{ run.runId }} · {{ run.traceEntryCount }} entries
+                      </p>
+                    </button>
+                    <p v-if="runHistory.length === 0" class="text-sm text-neutral-700">
+                      No persisted runs yet.
                     </p>
                   </div>
                 </CardContent>
