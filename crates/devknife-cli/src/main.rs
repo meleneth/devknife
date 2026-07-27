@@ -52,6 +52,8 @@ enum Command {
     },
     Plan {
         workflow: PathBuf,
+        #[arg(long, value_name = "PATH")]
+        environment: Option<PathBuf>,
         #[arg(long)]
         json: bool,
     },
@@ -136,8 +138,16 @@ fn main() -> Result<()> {
                 environment.name.as_deref().unwrap_or("<unnamed>")
             );
         }
-        Command::Plan { workflow, json } => {
+        Command::Plan {
+            workflow,
+            environment,
+            json,
+        } => {
             let workflow = read_workflow(workflow)?;
+            if let Some(environment) = environment {
+                let environment = read_environment(Some(environment))?;
+                validate_workflow_environment(&workflow, &environment)?;
+            }
             let plan = plan_workflow(&workflow);
             if json {
                 println!("{}", serde_json::to_string_pretty(&plan)?);
@@ -501,6 +511,28 @@ mod tests {
                 allow_capability,
                 ..
             } if allow_capability == ["network.graphql", "network.websocket"]
+        ));
+    }
+
+    #[test]
+    fn parses_plan_environment() {
+        let cli = Cli::try_parse_from([
+            "devknife",
+            "plan",
+            "workflow.yaml",
+            "--environment",
+            "environment.yaml",
+        ])
+        .expect("command parses");
+
+        assert!(matches!(
+            cli.command,
+            Command::Plan {
+                workflow,
+                environment: Some(environment),
+                ..
+            } if workflow == Path::new("workflow.yaml")
+                && environment == Path::new("environment.yaml")
         ));
     }
 

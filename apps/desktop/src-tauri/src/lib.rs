@@ -123,10 +123,16 @@ fn list_environments() -> Result<Vec<EnvironmentSummary>, String> {
 }
 
 #[tauri::command]
-fn plan_workflow_file(path: String) -> Result<RunPlan, String> {
+fn plan_workflow_file(path: String, environment_path: Option<String>) -> Result<RunPlan, String> {
     let root = repo_root()?;
     let workflow_path = resolve_workflow_path(&root, &path)?;
     let workflow = read_workflow(&workflow_path)?;
+    if let Some(path) = environment_path {
+        let environment_path = resolve_environment_path(&root, &path)?;
+        let environment = read_environment_file(&environment_path)?;
+        validate_workflow_environment(&workflow, &environment)
+            .map_err(|error| error.to_string())?;
+    }
     Ok(plan_workflow(&workflow))
 }
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import {
   AlertCircle,
@@ -178,6 +178,12 @@ onBeforeUnmount(() => {
   window.removeEventListener('beforeunload', preventUnsavedClose)
 })
 
+watch(selectedEnvironmentPath, (current, previous) => {
+  if (current !== previous && selectedPath.value) {
+    void loadPlan()
+  }
+})
+
 function preventUnsavedClose(event: BeforeUnloadEvent) {
   if (!sourceDirty.value) return
 
@@ -238,6 +244,7 @@ async function loadPlan() {
   try {
     selectedPlan.value = await invoke<RunPlan>('plan_workflow_file', {
       path: selectedPath.value,
+      environmentPath: selectedEnvironmentPath.value || null,
     })
   } catch (cause) {
     selectedPlan.value = fallbackPlan(selectedWorkflow.value)

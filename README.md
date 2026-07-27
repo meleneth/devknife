@@ -59,6 +59,7 @@ Useful commands:
 - `cargo run -p devknife-cli -- run examples/workflows/bootstrap.workflow.yaml --dry-run`
 - `testbed/bin/rest-create-user-smoke`
 - `cargo run -p devknife-cli -- plan examples/workflows/bootstrap.workflow.yaml`
+- `cargo run -p devknife-cli -- plan examples/workflows/rest-smoke.workflow.yaml --environment examples/environments/local.yaml`
 - `cargo run -p devknife-cli -- validate examples/workflows/bootstrap.workflow.yaml`
 - `cargo run -p devknife-cli -- validate examples/workflows/rest-smoke.workflow.yaml --environment examples/environments/local.yaml`
 - `cargo run -p devknife-cli -- validate-environment examples/environments/local.yaml`
@@ -78,7 +79,7 @@ listed by the run plan.
 writing a trace artifact.
 Workflow runs preflight named services plus `{{ env.name }}` and `{{ secret.name }}` references
 before executing effects. Pass `--environment` to `validate` to run the same binding check without
-execution.
+execution, or to `plan` to check bindings before printing the plan.
 
 The desktop app lives in `apps/desktop`. `dev:web` runs the Vue shell in a browser with fallback scaffold data; `dev:tauri` runs the desktop app and invokes Rust commands for workflow listing, planning, and execution. On Linux, Tauri requires WebKit/GTK system development packages; see `docs/008-devcontainer-and-tooling.md`.
 
