@@ -305,6 +305,9 @@ async function runSelectedWorkflow() {
   try {
     runReport.value = await invoke<RunReport>('run_workflow_file', {
       path: selectedPath.value,
+      allowedCapabilities: writeCapabilities.map(
+        (capability) => capability.id,
+      ),
     })
     await refreshRunHistory()
     activeTab.value = 'trace'

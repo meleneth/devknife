@@ -4,8 +4,8 @@ use std::{
 };
 
 use devknife_core::{
-    load_environment_yaml, load_workflow_yaml, plan_workflow, ExecutionLimits, LoadError, RunPlan,
-    RunReport, Runner, RuntimeEnvironment,
+    load_environment_yaml, load_workflow_yaml, plan_workflow, ExecutionLimits, ExecutionPolicy,
+    LoadError, RunPlan, RunReport, Runner, RuntimeEnvironment,
 };
 use serde::Serialize;
 
@@ -155,12 +155,17 @@ fn save_workflow_source(
 }
 
 #[tauri::command]
-fn run_workflow_file(path: String) -> Result<RunReport, String> {
+fn run_workflow_file(path: String, allowed_capabilities: Vec<String>) -> Result<RunReport, String> {
     let root = repo_root()?;
     let workflow_path = resolve_repo_path(&root, &path)?;
     let workflow = read_workflow(&workflow_path)?;
     let environment = read_environment(&root)?;
-    let report = Runner::with_environment(ExecutionLimits::default(), environment).run(workflow);
+    let report = Runner::with_environment_and_policy(
+        ExecutionLimits::default(),
+        environment,
+        ExecutionPolicy::allow_capabilities(allowed_capabilities),
+    )
+    .run(workflow);
 
     write_run_report(&root, &report)?;
     Ok(report)

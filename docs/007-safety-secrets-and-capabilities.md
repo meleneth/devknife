@@ -34,6 +34,7 @@ Current run planning reports required capabilities before execution:
 write-capable effects unless each one is approved with a repeatable
 `--allow-capability <capability>` option. `--allow-write` remains available as an explicit
 approve-all convenience. The desktop requires explicit confirmation for write-capable effects.
+Confirmed desktop capabilities are passed to the engine as an exact per-run allowlist.
 
 ## Risk Levels
 

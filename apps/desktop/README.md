@@ -20,6 +20,7 @@ overwriting files that changed on disk. Writable source paths are confined to
 Validation distinguishes YAML syntax failures from semantic workflow errors and reports source
 locations when the parser provides them.
 Desktop runs that request write-capable effects require explicit confirmation before execution.
+The confirmed capability IDs are passed to the engine as an exact per-run allowlist.
 Completed runs open their trace automatically, with free-text filtering across event, effect, and
 payload details.
 Desktop runs persist the same `runs/<run_id>.trace.json` artifacts as CLI runs.
