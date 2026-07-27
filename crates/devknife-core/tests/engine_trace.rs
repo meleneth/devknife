@@ -248,6 +248,38 @@ seed_events:
 }
 
 #[test]
+fn workflow_loader_rejects_unknown_fields_at_nested_levels() {
+    let unknown_root = devknife_core::load_workflow_yaml(
+        r#"
+name: typo-at-root
+handlerz: []
+"#,
+    );
+    assert!(unknown_root
+        .expect_err("unknown root field must fail")
+        .to_string()
+        .contains("unknown field `handlerz`"));
+
+    let unknown_effect = devknife_core::load_workflow_yaml(
+        r#"
+name: typo-in-effect
+handlers:
+  - on: workflow.started
+    effects:
+      - type: rest
+        method: GET
+        base_url: http://localhost:18101
+        path: /health
+        headerz: {}
+"#,
+    );
+    assert!(unknown_effect
+        .expect_err("unknown effect field must fail")
+        .to_string()
+        .contains("unknown field `headerz`"));
+}
+
+#[test]
 fn workflow_plan_lists_required_capabilities_and_effect_order() {
     let workflow = devknife_core::load_workflow_yaml(
         r#"
@@ -355,11 +387,10 @@ handlers:
   - on: workflow.started
     effects:
       - type: graphql
-        operation: create_account
+        operation_name: create_account
         base_url: http://127.0.0.1:1/graphql
         query: "mutation { createAccount { id } }"
       - type: websocket
-        operation: notify
         url: ws://127.0.0.1:1
         send:
           text: notify

@@ -341,6 +341,7 @@ fn validate_json_path_payload(
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct WorkflowDocument {
     #[serde(default = "default_workflow_version")]
     version: String,
@@ -376,6 +377,7 @@ impl WorkflowDocument {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct SeedEventDocument {
     id: Option<String>,
     #[serde(rename = "type")]

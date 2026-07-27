@@ -16,6 +16,7 @@ pub struct Workflow {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Handler {
     pub on: String,
     #[serde(default)]

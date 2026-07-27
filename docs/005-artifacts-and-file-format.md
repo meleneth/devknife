@@ -95,3 +95,7 @@ services:
 ```
 
 The interpolation and response path syntax are intentionally minimal. They are not a scripting language.
+
+The `v1alpha1` workflow loader rejects unknown fields at the workflow, event, handler, effect,
+expectation, and emission levels. Misspelled keys therefore fail validation instead of being
+silently ignored.

@@ -3,7 +3,7 @@ use serde_json::Value;
 use std::collections::BTreeMap;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Effect {
     Emit { event_type: String, payload: Value },
     Record { message: String },
@@ -33,13 +33,14 @@ impl Effect {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct AssertEffect {
     pub path: String,
     pub equals: Value,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub struct RestEffect {
     pub service: Option<String>,
     pub base_url: Option<String>,
@@ -82,11 +83,13 @@ impl RestMethod {
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct RestExpectations {
     pub status: Option<u16>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct RestEventEmission {
     pub event_type: String,
     #[serde(default)]
@@ -94,7 +97,7 @@ pub struct RestEventEmission {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub struct GraphqlEffect {
     pub service: Option<String>,
     pub base_url: Option<String>,
@@ -109,11 +112,13 @@ pub struct GraphqlEffect {
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct GraphqlExpectations {
     pub status: Option<u16>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct GraphqlEventEmission {
     pub event_type: String,
     #[serde(default)]
@@ -121,12 +126,13 @@ pub struct GraphqlEventEmission {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct JsonPathSelector {
     pub from: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub struct SnsPublishEffect {
     pub service: Option<String>,
     pub endpoint_url: Option<String>,
@@ -137,6 +143,7 @@ pub struct SnsPublishEffect {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct SnsEventEmission {
     pub event_type: String,
     #[serde(default)]
@@ -144,7 +151,7 @@ pub struct SnsEventEmission {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub struct SqsSendEffect {
     pub service: Option<String>,
     pub endpoint_url: Option<String>,
@@ -155,7 +162,7 @@ pub struct SqsSendEffect {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub struct SqsReceiveEffect {
     pub service: Option<String>,
     pub endpoint_url: Option<String>,
@@ -171,6 +178,7 @@ pub struct SqsReceiveEffect {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct SqsEventEmission {
     pub event_type: String,
     #[serde(default)]
@@ -182,7 +190,7 @@ fn default_sqs_max_messages() -> u8 {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub struct WebsocketEffect {
     pub service: Option<String>,
     pub url: Option<String>,
@@ -205,12 +213,14 @@ pub enum WebsocketSend {
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct WebsocketExpectations {
     #[serde(default)]
     pub json: BTreeMap<String, Value>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct WebsocketEventEmission {
     pub event_type: String,
     #[serde(default)]
