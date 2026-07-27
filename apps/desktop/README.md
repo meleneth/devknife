@@ -55,5 +55,7 @@ Discovered files are canonicalized before reading, so symlinks cannot escape the
 environment directories.
 Persisted trace reads use the same confinement, corrupt reports produce per-file warnings without
 hiding valid history, and trace writes safely replace existing paths without following symlinks.
+Trace filenames and embedded run IDs must agree, and IDs are validated before listing, reading, or
+writing reports.
 
 On Linux, Tauri requires WebKit/GTK development packages. See `../../docs/008-devcontainer-and-tooling.md`.

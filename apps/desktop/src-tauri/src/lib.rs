@@ -270,13 +270,7 @@ fn list_run_reports() -> Result<RunReportList, String> {
 
 #[tauri::command]
 fn read_run_report(run_id: String) -> Result<RunReport, String> {
-    if run_id.is_empty()
-        || !run_id
-            .chars()
-            .all(|character| character.is_ascii_alphanumeric() || character == '-')
-    {
-        return Err("invalid run id".to_string());
-    }
+    validate_run_id(&run_id)?;
 
     let run_dir = repo_root()?.join("runs");
     let path = confine_discovered_path(&run_dir, &run_dir.join(format!("{run_id}.trace.json")))?;
@@ -415,10 +409,26 @@ fn summarize_environment(root: &Path, environment_dir: &Path, path: &Path) -> En
 
 fn summarize_run_report(run_dir: &Path, path: &Path) -> Result<RunSummary, String> {
     let path = confine_discovered_path(run_dir, path)?;
+    let file_name = path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .ok_or_else(|| format!("run report {} has no valid filename", path.display()))?;
+    let expected_run_id = file_name
+        .strip_suffix(".trace.json")
+        .ok_or_else(|| format!("run report {} has an invalid filename", path.display()))?;
+    validate_run_id(expected_run_id)?;
     let contents = fs::read_to_string(&path)
         .map_err(|error| format!("failed to read run report {}: {error}", path.display()))?;
     let report: RunReport = serde_json::from_str(&contents)
         .map_err(|error| format!("failed to parse run report {}: {error}", path.display()))?;
+    if report.run_id != expected_run_id {
+        return Err(format!(
+            "run report {} contains run id '{}' instead of '{}'",
+            path.display(),
+            report.run_id,
+            expected_run_id
+        ));
+    }
     let modified_at_unix_ms = fs::metadata(&path)
         .and_then(|metadata| metadata.modified())
         .and_then(|modified| {
@@ -438,6 +448,7 @@ fn summarize_run_report(run_dir: &Path, path: &Path) -> Result<RunSummary, Strin
 }
 
 fn write_run_report(root: &Path, report: &RunReport) -> Result<(), String> {
+    validate_run_id(&report.run_id)?;
     let run_dir = root.join("runs");
     fs::create_dir_all(&run_dir).map_err(|error| {
         format!(
@@ -449,6 +460,18 @@ fn write_run_report(root: &Path, report: &RunReport) -> Result<(), String> {
     let contents = serde_json::to_string_pretty(report)
         .map_err(|error| format!("failed to serialize run report: {error}"))?;
     replace_file_safely(&path, contents.as_bytes())
+}
+
+fn validate_run_id(run_id: &str) -> Result<(), String> {
+    if run_id.is_empty()
+        || run_id.len() > 128
+        || !run_id
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric() || character == '-')
+    {
+        return Err("invalid run id".to_string());
+    }
+    Ok(())
 }
 
 fn replace_file_safely(path: &Path, contents: &[u8]) -> Result<(), String> {
@@ -782,6 +805,32 @@ mod tests {
 
         assert!(error.contains("failed to parse run report"));
         assert!(error.contains("broken.trace.json"));
+
+        fs::remove_dir_all(&directory).expect("remove test directory");
+    }
+
+    #[test]
+    fn run_report_filename_must_match_embedded_id() {
+        let unique = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .expect("time after epoch")
+            .as_nanos();
+        let directory = std::env::temp_dir().join(format!(
+            "devknife-report-identity-{}-{unique}",
+            std::process::id()
+        ));
+        fs::create_dir(&directory).expect("create test directory");
+        let path = directory.join("expected.trace.json");
+        fs::write(
+            &path,
+            r#"{"run_id":"different","workflow_name":"test","status":"succeeded","trace":[],"failure":null}"#,
+        )
+        .expect("write mismatched report");
+
+        let error =
+            summarize_run_report(&directory, &path).expect_err("mismatched run id must fail");
+
+        assert!(error.contains("contains run id 'different' instead of 'expected'"));
 
         fs::remove_dir_all(&directory).expect("remove test directory");
     }
