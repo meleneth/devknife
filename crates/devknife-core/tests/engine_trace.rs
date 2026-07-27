@@ -486,6 +486,28 @@ services:
 }
 
 #[test]
+fn environment_loader_rejects_empty_names() {
+    let empty_environment_name = devknife_core::load_environment_yaml(
+        r#"
+name: " "
+"#,
+    )
+    .expect_err("blank environment name must fail")
+    .to_string();
+    assert!(empty_environment_name.contains("environment name must not be empty"));
+
+    let empty_value_name = devknife_core::load_environment_yaml(
+        r#"
+values:
+  "": present
+"#,
+    )
+    .expect_err("blank value name must fail")
+    .to_string();
+    assert!(empty_value_name.contains("environment value name is required"));
+}
+
+#[test]
 fn workflow_environment_preflight_reports_all_missing_bindings() {
     let workflow = devknife_core::load_workflow_yaml(
         r#"

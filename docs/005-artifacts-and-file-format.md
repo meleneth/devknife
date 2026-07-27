@@ -100,6 +100,7 @@ The `v1alpha1` workflow loader rejects unknown fields at the workflow, event, ha
 expectation, and emission levels. Misspelled keys therefore fail validation instead of being
 silently ignored.
 Environment files likewise reject unknown top-level sections and service-binding fields.
+Provided environment names and all service, value, and secret-reference keys must be non-empty.
 Use `devknife validate-environment <path>` to validate an environment independently from a run.
 The test suite also parses every checked-in example workflow and environment to catch schema drift
 in CI.

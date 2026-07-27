@@ -30,6 +30,16 @@ pub fn load_environment_yaml(input: &str) -> Result<RuntimeEnvironment, LoadErro
 }
 
 pub fn validate_environment(environment: &RuntimeEnvironment) -> Result<(), LoadError> {
+    if environment
+        .name
+        .as_deref()
+        .is_some_and(|name| name.trim().is_empty())
+    {
+        return Err(LoadError::Validation(
+            "environment name must not be empty when provided".to_string(),
+        ));
+    }
+
     for (service, binding) in &environment.services {
         if service.trim().is_empty() {
             return Err(LoadError::Validation(
@@ -40,6 +50,14 @@ pub fn validate_environment(environment: &RuntimeEnvironment) -> Result<(), Load
             return Err(LoadError::Validation(format!(
                 "environment service {service}.base_url is required"
             )));
+        }
+    }
+
+    for name in environment.values.keys() {
+        if name.trim().is_empty() {
+            return Err(LoadError::Validation(
+                "environment value name is required".to_string(),
+            ));
         }
     }
 
