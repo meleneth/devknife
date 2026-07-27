@@ -81,7 +81,7 @@ Workflow runs preflight named services plus `{{ env.name }}` and `{{ secret.name
 before executing effects. Pass `--environment` to `validate` to run the same binding check without
 execution, or to `plan` to check bindings before printing the plan.
 
-The desktop app lives in `apps/desktop`. `dev:web` runs the Vue shell in a browser with fallback scaffold data; `dev:tauri` runs the desktop app and invokes Rust commands for workflow listing, planning, and execution. On Linux, Tauri requires WebKit/GTK system development packages; see `docs/008-devcontainer-and-tooling.md`.
+The desktop app lives in `apps/desktop`. `dev:web` previews the Vue shell, while repository operations require `dev:tauri`, which invokes Rust commands for workflow listing, planning, and execution. On Linux, Tauri requires WebKit/GTK system development packages; see `docs/008-devcontainer-and-tooling.md`.
 
 REST smoke test:
 

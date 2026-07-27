@@ -11,7 +11,8 @@ npm run dev:web
 npm run dev:tauri
 ```
 
-`dev:web` runs the Vue shell in a browser and falls back to scaffold data when Tauri commands are unavailable.
+`dev:web` runs the Vue shell in a browser, but repository operations require the Tauri backend.
+Backend failures are shown explicitly rather than replaced with synthetic workflow data.
 
 `dev:tauri` runs the desktop shell and invokes Rust commands from `src-tauri`, backed by `devknife-core`.
 The shell includes a workflow YAML editor with validation, guarded saving, and protection against

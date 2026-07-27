@@ -222,8 +222,8 @@ async function refreshWorkflows() {
   try {
     workflows.value = await invoke<WorkflowSummary[]>('list_workflows')
   } catch (cause) {
-    workflows.value = fallbackWorkflows()
-    error.value = `Tauri backend unavailable; showing scaffold data. ${String(cause)}`
+    workflows.value = []
+    error.value = `Unable to load workflows. ${String(cause)}`
   } finally {
     endLoading()
   }
@@ -313,9 +313,12 @@ async function loadSource() {
     savedWorkflowSource.value = workflowSource.value
     sourceStatus.value = ''
     sourceValidation.value = null
-  } catch {
-    workflowSource.value = fallbackSource(selectedWorkflow.value)
-    savedWorkflowSource.value = workflowSource.value
+  } catch (cause) {
+    workflowSource.value = ''
+    savedWorkflowSource.value = ''
+    sourceStatus.value = ''
+    sourceValidation.value = null
+    error.value = `Unable to load workflow source. ${String(cause)}`
   }
 }
 
@@ -475,26 +478,6 @@ function traceDetail(entry: TraceEntry) {
   return entry.id
 }
 
-function fallbackWorkflows(): WorkflowSummary[] {
-  return [
-    {
-      name: 'cross-protocol-smoke',
-      version: 'devknife.workflow/v1alpha1',
-      path: 'examples/workflows/cross-protocol-smoke.workflow.yaml',
-      seedEventCount: 1,
-      handlerCount: 7,
-      effectCount: 8,
-      capabilityCount: 9,
-    },
-  ]
-}
-
-function fallbackSource(workflow: WorkflowSummary | undefined) {
-  return `# Source preview is available in the Tauri desktop app.
-version: ${workflow?.version ?? 'devknife.workflow/v1alpha1'}
-name: ${workflow?.name ?? 'cross-protocol-smoke'}
-`
-}
 </script>
 
 <template>
