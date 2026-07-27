@@ -11,6 +11,8 @@ use devknife_core::{
 };
 use serde::Serialize;
 
+const MAX_RUN_REPORT_BYTES: u64 = 16 * 1024 * 1024;
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct WorkflowSummary {
@@ -274,10 +276,7 @@ fn read_run_report(run_id: String) -> Result<RunReport, String> {
 
     let run_dir = repo_root()?.join("runs");
     let path = confine_discovered_path(&run_dir, &run_dir.join(format!("{run_id}.trace.json")))?;
-    let contents = fs::read_to_string(&path)
-        .map_err(|error| format!("failed to read run report {}: {error}", path.display()))?;
-    serde_json::from_str(&contents)
-        .map_err(|error| format!("failed to parse run report {}: {error}", path.display()))
+    parse_run_report_file(&path)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -417,10 +416,7 @@ fn summarize_run_report(run_dir: &Path, path: &Path) -> Result<RunSummary, Strin
         .strip_suffix(".trace.json")
         .ok_or_else(|| format!("run report {} has an invalid filename", path.display()))?;
     validate_run_id(expected_run_id)?;
-    let contents = fs::read_to_string(&path)
-        .map_err(|error| format!("failed to read run report {}: {error}", path.display()))?;
-    let report: RunReport = serde_json::from_str(&contents)
-        .map_err(|error| format!("failed to parse run report {}: {error}", path.display()))?;
+    let report = parse_run_report_file(&path)?;
     if report.run_id != expected_run_id {
         return Err(format!(
             "run report {} contains run id '{}' instead of '{}'",
@@ -447,6 +443,23 @@ fn summarize_run_report(run_dir: &Path, path: &Path) -> Result<RunSummary, Strin
     })
 }
 
+fn parse_run_report_file(path: &Path) -> Result<RunReport, String> {
+    let metadata = fs::metadata(path)
+        .map_err(|error| format!("failed to read run report metadata: {error}"))?;
+    if metadata.len() > MAX_RUN_REPORT_BYTES {
+        return Err(format!(
+            "run report {} is {} bytes; limit is {} bytes",
+            path.display(),
+            metadata.len(),
+            MAX_RUN_REPORT_BYTES
+        ));
+    }
+    let contents = fs::read_to_string(path)
+        .map_err(|error| format!("failed to read run report {}: {error}", path.display()))?;
+    serde_json::from_str(&contents)
+        .map_err(|error| format!("failed to parse run report {}: {error}", path.display()))
+}
+
 fn write_run_report(root: &Path, report: &RunReport) -> Result<(), String> {
     validate_run_id(&report.run_id)?;
     let run_dir = root.join("runs");
@@ -459,6 +472,13 @@ fn write_run_report(root: &Path, report: &RunReport) -> Result<(), String> {
     let path = run_dir.join(format!("{}.trace.json", report.run_id));
     let contents = serde_json::to_string_pretty(report)
         .map_err(|error| format!("failed to serialize run report: {error}"))?;
+    if contents.len() as u64 > MAX_RUN_REPORT_BYTES {
+        return Err(format!(
+            "run report is {} bytes; limit is {} bytes",
+            contents.len(),
+            MAX_RUN_REPORT_BYTES
+        ));
+    }
     replace_file_safely(&path, contents.as_bytes())
 }
 
@@ -805,6 +825,30 @@ mod tests {
 
         assert!(error.contains("failed to parse run report"));
         assert!(error.contains("broken.trace.json"));
+
+        fs::remove_dir_all(&directory).expect("remove test directory");
+    }
+
+    #[test]
+    fn oversized_run_reports_are_rejected_before_reading() {
+        let unique = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .expect("time after epoch")
+            .as_nanos();
+        let directory = std::env::temp_dir().join(format!(
+            "devknife-oversized-report-{}-{unique}",
+            std::process::id()
+        ));
+        fs::create_dir(&directory).expect("create test directory");
+        let path = directory.join("oversized.trace.json");
+        let file = fs::File::create(&path).expect("create sparse report");
+        file.set_len(super::MAX_RUN_REPORT_BYTES + 1)
+            .expect("size sparse report");
+
+        let error =
+            summarize_run_report(&directory, &path).expect_err("oversized report must fail");
+
+        assert!(error.contains("limit is 16777216 bytes"));
 
         fs::remove_dir_all(&directory).expect("remove test directory");
     }

@@ -57,5 +57,7 @@ Persisted trace reads use the same confinement, corrupt reports produce per-file
 hiding valid history, and trace writes safely replace existing paths without following symlinks.
 Trace filenames and embedded run IDs must agree, and IDs are validated before listing, reading, or
 writing reports.
+Persisted report parsing is capped at 16 MiB per file to prevent unbounded memory use during history
+discovery.
 
 On Linux, Tauri requires WebKit/GTK development packages. See `../../docs/008-devcontainer-and-tooling.md`.
