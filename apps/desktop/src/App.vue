@@ -138,6 +138,7 @@ const traceQuery = ref('')
 const plannedWorkflowPath = ref('')
 const plannedEnvironmentPath = ref('')
 let planRequestId = 0
+let loadingOperationCount = 0
 
 const selectedWorkflow = computed(() =>
   workflows.value.find((workflow) => workflow.path === selectedPath.value),
@@ -200,11 +201,21 @@ function preventUnsavedClose(event: BeforeUnloadEvent) {
   event.returnValue = ''
 }
 
+function beginLoading() {
+  loadingOperationCount += 1
+  loading.value = true
+}
+
+function endLoading() {
+  loadingOperationCount = Math.max(0, loadingOperationCount - 1)
+  loading.value = loadingOperationCount > 0
+}
+
 async function refreshWorkflows() {
   if (!confirmDiscardChanges()) return
 
   const previousPath = selectedPath.value
-  loading.value = true
+  beginLoading()
   error.value = ''
   try {
     workflows.value = await invoke<WorkflowSummary[]>('list_workflows')
@@ -212,7 +223,7 @@ async function refreshWorkflows() {
     workflows.value = fallbackWorkflows()
     error.value = `Tauri backend unavailable; showing scaffold data. ${String(cause)}`
   } finally {
-    loading.value = false
+    endLoading()
   }
 
   selectedPath.value = workflows.value.some(
@@ -263,7 +274,7 @@ async function loadPlan() {
   const environmentPath = selectedEnvironmentPath.value
   plannedWorkflowPath.value = ''
   plannedEnvironmentPath.value = ''
-  loading.value = true
+  beginLoading()
   error.value = ''
   try {
     const plan = await invoke<RunPlan>('plan_workflow_file', {
@@ -281,9 +292,7 @@ async function loadPlan() {
     selectedPlan.value = null
     error.value = `Unable to load plan from backend. ${String(cause)}`
   } finally {
-    if (requestId === planRequestId) {
-      loading.value = false
-    }
+    endLoading()
   }
 }
 

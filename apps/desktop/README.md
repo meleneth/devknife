@@ -34,5 +34,6 @@ and environment; failed preflights do not display synthetic fallback plan data.
 Unsaved editor changes invalidate that plan until the workflow is saved, validated, and planned
 again, and stale plan details are cleared from the UI immediately.
 Refreshing workflow or environment lists preserves the current selection while it still exists.
+Concurrent startup and planning loads keep controls disabled until every active operation finishes.
 
 On Linux, Tauri requires WebKit/GTK development packages. See `../../docs/008-devcontainer-and-tooling.md`.
