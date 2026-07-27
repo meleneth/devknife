@@ -13,11 +13,13 @@ import {
   RotateCcw,
   Route,
   Save,
+  Search,
   ShieldCheck,
   Terminal,
 } from '@lucide/vue'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import {
   Card,
   CardContent,
@@ -102,6 +104,8 @@ const running = ref(false)
 const saving = ref(false)
 const error = ref('')
 const sourceStatus = ref('')
+const activeTab = ref('plan')
+const traceQuery = ref('')
 
 const selectedWorkflow = computed(() =>
   workflows.value.find((workflow) => workflow.path === selectedPath.value),
@@ -114,7 +118,17 @@ const mutatingCapabilities = computed(
     ) ?? [],
 )
 
-const traceRows = computed(() => runReport.value?.trace ?? [])
+const traceRows = computed(() => {
+  const entries = runReport.value?.trace ?? []
+  const query = traceQuery.value.trim().toLocaleLowerCase()
+  if (!query) return entries
+
+  return entries.filter((entry) =>
+    `${traceLabel(entry)} ${traceDetail(entry)} ${JSON.stringify(entry.kind)}`
+      .toLocaleLowerCase()
+      .includes(query),
+  )
+})
 const sourceDirty = computed(
   () => workflowSource.value !== savedWorkflowSource.value,
 )
@@ -148,6 +162,8 @@ async function selectWorkflow(path: string) {
 
   selectedPath.value = path
   runReport.value = null
+  traceQuery.value = ''
+  activeTab.value = 'plan'
   await loadWorkflow()
 }
 
@@ -260,6 +276,7 @@ async function runSelectedWorkflow() {
     runReport.value = await invoke<RunReport>('run_workflow_file', {
       path: selectedPath.value,
     })
+    activeTab.value = 'trace'
   } catch (cause) {
     error.value = `Run failed before the engine returned a report. ${String(cause)}`
   } finally {
@@ -483,7 +500,7 @@ name: ${workflow?.name ?? 'cross-protocol-smoke'}
                 <span>{{ error }}</span>
               </div>
 
-              <Tabs default-value="plan" class="w-full">
+              <Tabs v-model="activeTab" class="w-full">
                 <TabsList class="mb-4 border-2 border-black bg-white shadow-[3px_3px_0_#000]">
                   <TabsTrigger value="plan">Plan</TabsTrigger>
                   <TabsTrigger value="source">Source</TabsTrigger>
@@ -621,6 +638,20 @@ name: ${workflow?.name ?? 'cross-protocol-smoke'}
                       </CardDescription>
                     </CardHeader>
                     <CardContent>
+                      <div v-if="runReport" class="mb-4 flex items-center gap-3">
+                        <div class="relative min-w-0 flex-1">
+                          <Search class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2" />
+                          <Input
+                            v-model="traceQuery"
+                            aria-label="Filter trace entries"
+                            placeholder="Filter trace events, effects, and payloads"
+                            class="border-2 border-black bg-white pl-9"
+                          />
+                        </div>
+                        <Badge class="shrink-0 border-2 border-black bg-[#6ee7f9] text-black">
+                          {{ traceRows.length }} / {{ runReport.trace.length }}
+                        </Badge>
+                      </div>
                       <ScrollArea class="h-[520px] pr-4">
                         <div
                           v-if="!runReport"
@@ -630,6 +661,17 @@ name: ${workflow?.name ?? 'cross-protocol-smoke'}
                             <Terminal class="mx-auto mb-3 size-8" />
                             <p class="font-black">No trace loaded</p>
                             <p class="text-sm text-neutral-700">The run button calls the Tauri backend.</p>
+                          </div>
+                        </div>
+
+                        <div
+                          v-else-if="traceRows.length === 0"
+                          class="grid h-80 place-items-center border-2 border-dashed border-black bg-[#f7f0d8] text-center"
+                        >
+                          <div>
+                            <Search class="mx-auto mb-3 size-8" />
+                            <p class="font-black">No matching trace entries</p>
+                            <p class="text-sm text-neutral-700">Try a broader filter.</p>
                           </div>
                         </div>
 

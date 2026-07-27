@@ -89,7 +89,7 @@ Stack: Tauri + Vue + shadcn-vue.
 - trace viewer
 - run console
 
-Implementation note: an initial desktop shell now exists in `apps/desktop`. It lists example workflows, requests plans from `devknife-core`, calls the engine through Tauri commands, renders the returned trace/report in Vue, and provides a repository-confined YAML editor with validation and guarded saving.
+Implementation note: an initial desktop shell now exists in `apps/desktop`. It lists example workflows, requests plans from `devknife-core`, calls the engine through Tauri commands, renders searchable trace/report views in Vue, and provides a repository-confined YAML editor with validation and guarded saving.
 
 ## Exit Criteria For V1 Candidate
 
