@@ -59,6 +59,7 @@ Useful commands:
 - `cargo run -p devknife-cli -- run examples/workflows/bootstrap.workflow.yaml --dry-run`
 - `cargo run -p devknife-cli -- plan examples/workflows/bootstrap.workflow.yaml`
 - `cargo run -p devknife-cli -- validate examples/workflows/bootstrap.workflow.yaml`
+- `cargo run -p devknife-cli -- validate-environment examples/environments/local.yaml`
 - `npm --prefix apps/desktop run build`
 - `npm --prefix apps/desktop run dev:web`
 - `npm --prefix apps/desktop run dev:tauri`

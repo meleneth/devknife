@@ -45,6 +45,9 @@ enum Command {
     Validate {
         workflow: PathBuf,
     },
+    ValidateEnvironment {
+        environment: PathBuf,
+    },
     Plan {
         workflow: PathBuf,
         #[arg(long)]
@@ -115,6 +118,13 @@ fn main() -> Result<()> {
             let workflow = read_workflow(workflow)?;
             validate_workflow(&workflow)?;
             println!("valid workflow: {}", workflow.name);
+        }
+        Command::ValidateEnvironment { environment } => {
+            let environment = read_environment(Some(environment))?;
+            println!(
+                "valid environment: {}",
+                environment.name.as_deref().unwrap_or("<unnamed>")
+            );
         }
         Command::Plan { workflow, json } => {
             let workflow = read_workflow(workflow)?;
@@ -431,5 +441,50 @@ fn emitted_suffix(events: &[devknife_core::Event]) -> String {
         String::new()
     } else {
         format!(" emitted {emitted}")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Cli, Command};
+    use clap::Parser;
+    use std::path::Path;
+
+    #[test]
+    fn parses_validate_environment_command() {
+        let cli = Cli::try_parse_from([
+            "devknife",
+            "validate-environment",
+            "examples/environments/local.yaml",
+        ])
+        .expect("command parses");
+
+        assert!(matches!(
+            cli.command,
+            Command::ValidateEnvironment { environment }
+                if environment == Path::new("examples/environments/local.yaml")
+        ));
+    }
+
+    #[test]
+    fn parses_exact_capability_approvals() {
+        let cli = Cli::try_parse_from([
+            "devknife",
+            "run",
+            "workflow.yaml",
+            "--allow-capability",
+            "network.graphql",
+            "--allow-capability",
+            "network.websocket",
+        ])
+        .expect("command parses");
+
+        assert!(matches!(
+            cli.command,
+            Command::Run {
+                allow_capability,
+                ..
+            } if allow_capability == ["network.graphql", "network.websocket"]
+        ));
     }
 }
