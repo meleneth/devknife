@@ -4,8 +4,8 @@ use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
 use devknife_core::{
     load_environment_yaml, load_workflow_yaml, plan_workflow, validate_workflow, ExecutionLimits,
-    GraphqlAssertionObservation, Observation, RestAssertionObservation, RunPlan, RunReport,
-    RunStatus, Runner, TraceEntryKind,
+    ExecutionPolicy, GraphqlAssertionObservation, Observation, RestAssertionObservation, RunPlan,
+    RunReport, RunStatus, Runner, TraceEntryKind,
 };
 
 #[derive(Debug, Parser)]
@@ -30,6 +30,8 @@ enum Command {
         trace_dir: PathBuf,
         #[arg(long)]
         no_trace_file: bool,
+        #[arg(long, help = "Approve capabilities classified as write")]
+        allow_write: bool,
     },
     Validate {
         workflow: PathBuf,
@@ -52,6 +54,7 @@ fn main() -> Result<()> {
             show_plan,
             trace_dir,
             no_trace_file,
+            allow_write,
         } => {
             let workflow = read_workflow(workflow)?;
             let plan = plan_workflow(&workflow);
@@ -60,8 +63,17 @@ fn main() -> Result<()> {
                 println!();
             }
             let environment = read_environment(environment)?;
-            let report =
-                Runner::with_environment(ExecutionLimits::default(), environment).run(workflow);
+            let policy = if allow_write {
+                ExecutionPolicy::allow_all()
+            } else {
+                ExecutionPolicy::deny_write()
+            };
+            let report = Runner::with_environment_and_policy(
+                ExecutionLimits::default(),
+                environment,
+                policy,
+            )
+            .run(workflow);
             let trace_path = if no_trace_file {
                 None
             } else {

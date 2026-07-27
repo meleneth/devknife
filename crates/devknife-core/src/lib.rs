@@ -15,7 +15,7 @@ pub use domain::{
     WebsocketReceivedObservation, WebsocketSend, WebsocketSentObservation, Workflow,
     CURRENT_WORKFLOW_VERSION,
 };
-pub use engine::{EngineError, ExecutionLimits, Runner};
+pub use engine::{EngineError, ExecutionLimits, ExecutionPolicy, Runner};
 pub use loader::{
     load_environment_yaml, load_workflow_yaml, validate_environment, validate_workflow, LoadError,
 };

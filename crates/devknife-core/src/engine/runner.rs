@@ -11,13 +11,14 @@ use tungstenite::{client, Message};
 use uuid::Uuid;
 
 use crate::domain::{
-    AssertEffect, AwsOperationObservation, Effect, Event, EventCause, GraphqlAssertionObservation,
-    GraphqlEffect, GraphqlOperationObservation, GraphqlResponseObservation, JsonPathSelector,
-    Observation, RestAssertionObservation, RestBody, RestEffect, RestOperationObservation,
-    RestResponseObservation, RunReport, RunStatus, RuntimeEnvironment, SnsPublishEffect,
-    SqsMessageObservation, SqsReceiveEffect, SqsSendEffect, TraceEntry, TraceEntryKind,
-    TraceFailure, WebsocketAssertionObservation, WebsocketEffect, WebsocketOperationObservation,
-    WebsocketReceivedObservation, WebsocketSend, WebsocketSentObservation, Workflow,
+    plan_workflow, AssertEffect, AwsOperationObservation, CapabilityRisk, Effect, Event,
+    EventCause, GraphqlAssertionObservation, GraphqlEffect, GraphqlOperationObservation,
+    GraphqlResponseObservation, JsonPathSelector, Observation, RestAssertionObservation, RestBody,
+    RestEffect, RestOperationObservation, RestResponseObservation, RunReport, RunStatus,
+    RuntimeEnvironment, SnsPublishEffect, SqsMessageObservation, SqsReceiveEffect, SqsSendEffect,
+    TraceEntry, TraceEntryKind, TraceFailure, WebsocketAssertionObservation, WebsocketEffect,
+    WebsocketOperationObservation, WebsocketReceivedObservation, WebsocketSend,
+    WebsocketSentObservation, Workflow,
 };
 
 use super::EngineError;
@@ -40,9 +41,29 @@ impl Default for ExecutionLimits {
 }
 
 #[derive(Clone, Debug)]
+pub struct ExecutionPolicy {
+    pub allow_write_capabilities: bool,
+}
+
+impl ExecutionPolicy {
+    pub fn allow_all() -> Self {
+        Self {
+            allow_write_capabilities: true,
+        }
+    }
+
+    pub fn deny_write() -> Self {
+        Self {
+            allow_write_capabilities: false,
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
 pub struct Runner {
     limits: ExecutionLimits,
     environment: RuntimeEnvironment,
+    policy: ExecutionPolicy,
 }
 
 impl Runner {
@@ -50,6 +71,7 @@ impl Runner {
         Self {
             limits,
             environment: RuntimeEnvironment::default(),
+            policy: ExecutionPolicy::allow_all(),
         }
     }
 
@@ -57,6 +79,19 @@ impl Runner {
         Self {
             limits,
             environment,
+            policy: ExecutionPolicy::allow_all(),
+        }
+    }
+
+    pub fn with_environment_and_policy(
+        limits: ExecutionLimits,
+        environment: RuntimeEnvironment,
+        policy: ExecutionPolicy,
+    ) -> Self {
+        Self {
+            limits,
+            environment,
+            policy,
         }
     }
 
@@ -68,6 +103,24 @@ impl Runner {
             run_id: state.run_id.clone(),
             workflow_name: workflow.name.clone(),
         });
+
+        if !self.policy.allow_write_capabilities {
+            let denied = plan_workflow(&workflow)
+                .required_capabilities
+                .into_iter()
+                .filter(|capability| capability.risk == CapabilityRisk::Write)
+                .map(|capability| capability.id)
+                .collect::<Vec<_>>();
+            if !denied.is_empty() {
+                return state.fail(
+                    None,
+                    EngineError::WriteCapabilitiesDenied {
+                        capabilities: denied.join(", "),
+                    }
+                    .to_string(),
+                );
+            }
+        }
 
         let mut queue = VecDeque::new();
         let mut created_events = 0usize;

@@ -29,7 +29,11 @@ Current run planning reports required capabilities before execution:
 - `future.db.write`
 - `future.shell.exec`
 
-The current model is advisory: `devknife plan <workflow>` displays required capabilities and effect order, and `devknife run --show-plan <workflow>` can print the same summary before execution. Enforcement policy remains future work.
+`devknife plan <workflow>` displays required capabilities and effect order, and
+`devknife run --show-plan <workflow>` can print the same summary before execution. CLI runs deny
+write-capable effects unless `--allow-write` is supplied. The desktop requires explicit
+confirmation for the same class of effects. More granular per-capability policy remains future
+work.
 
 ## Risk Levels
 

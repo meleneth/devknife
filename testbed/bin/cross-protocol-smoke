@@ -19,4 +19,4 @@ do
   curl --fail --silent --show-error "$url" >/dev/null
 done
 
-cargo run -p devknife-cli -- run examples/workflows/cross-protocol-smoke.workflow.yaml
+cargo run -p devknife-cli -- run examples/workflows/cross-protocol-smoke.workflow.yaml --allow-write

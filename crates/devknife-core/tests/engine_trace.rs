@@ -308,6 +308,42 @@ handlers:
 }
 
 #[test]
+fn execution_policy_denies_write_capabilities_before_effects_run() {
+    let workflow = devknife_core::load_workflow_yaml(
+        r#"
+name: denied-write
+seed_events:
+  - id: seed
+    type: account.create.requested
+handlers:
+  - on: account.create.requested
+    effects:
+      - type: rest
+        operation: create_account
+        method: POST
+        base_url: http://127.0.0.1:1
+        path: /accounts
+"#,
+    )
+    .expect("workflow parses");
+
+    let report = Runner::with_environment_and_policy(
+        ExecutionLimits::default(),
+        devknife_core::RuntimeEnvironment::default(),
+        devknife_core::ExecutionPolicy::deny_write(),
+    )
+    .run(workflow);
+
+    assert_eq!(report.status, RunStatus::Failed);
+    assert!(report
+        .failure
+        .expect("failure")
+        .message
+        .contains("network.http.write"));
+    assert_eq!(report.trace.len(), 2);
+}
+
+#[test]
 fn response_emission_requires_jsonpath_from_selector() {
     let shorthand = devknife_core::load_workflow_yaml(
         r#"

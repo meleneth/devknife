@@ -79,21 +79,21 @@ GraphQL smoke test:
 
 - `docker compose -f testbed/docker-compose.yml up -d graphql-service`
 - `curl http://localhost:18102/health`
-- `cargo run -p devknife-cli -- run examples/workflows/graphql-smoke.workflow.yaml`
+- `cargo run -p devknife-cli -- run examples/workflows/graphql-smoke.workflow.yaml --allow-write`
 - `docker compose -f testbed/docker-compose.yml down`
 - or `testbed/bin/graphql-smoke`
 
 SNS/SQS smoke test:
 
 - `docker compose -f testbed/docker-compose.yml up -d goaws`
-- `cargo run -p devknife-cli -- run examples/workflows/sns-sqs-smoke.workflow.yaml`
+- `cargo run -p devknife-cli -- run examples/workflows/sns-sqs-smoke.workflow.yaml --allow-write`
 - `docker compose -f testbed/docker-compose.yml down`
 - or `testbed/bin/sns-sqs-smoke`
 
 WebSocket smoke test:
 
 - `docker compose -f testbed/docker-compose.yml up --build -d websocket-service`
-- `cargo run -p devknife-cli -- run examples/workflows/websocket-smoke.workflow.yaml`
+- `cargo run -p devknife-cli -- run examples/workflows/websocket-smoke.workflow.yaml --allow-write`
 - `docker compose -f testbed/docker-compose.yml down`
 - or `testbed/bin/websocket-smoke`
 
