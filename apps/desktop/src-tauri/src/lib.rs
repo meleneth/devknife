@@ -1,5 +1,7 @@
 use std::{
     fs,
+    fs::OpenOptions,
+    io::Write,
     path::{Path, PathBuf},
 };
 
@@ -146,12 +148,7 @@ fn save_workflow_source(
         );
     }
 
-    fs::write(&workflow_path, source).map_err(|error| {
-        format!(
-            "failed to save workflow source {}: {error}",
-            workflow_path.display()
-        )
-    })
+    replace_file_safely(&workflow_path, source.as_bytes())
 }
 
 #[tauri::command]
@@ -299,6 +296,101 @@ fn write_run_report(root: &Path, report: &RunReport) -> Result<(), String> {
         .map_err(|error| format!("failed to write run report {}: {error}", path.display()))
 }
 
+fn replace_file_safely(path: &Path, contents: &[u8]) -> Result<(), String> {
+    let parent = path
+        .parent()
+        .ok_or_else(|| format!("file {} has no parent directory", path.display()))?;
+    let file_name = path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .ok_or_else(|| format!("file {} has no valid UTF-8 name", path.display()))?;
+
+    let mut temporary = None;
+    for attempt in 0..100 {
+        let candidate = parent.join(format!(
+            ".{file_name}.{}.{}.tmp",
+            std::process::id(),
+            attempt
+        ));
+        match OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&candidate)
+        {
+            Ok(file) => {
+                temporary = Some((candidate, file));
+                break;
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => {
+                return Err(format!(
+                    "failed to create temporary workflow file {}: {error}",
+                    candidate.display()
+                ));
+            }
+        }
+    }
+
+    let (temporary_path, mut temporary_file) =
+        temporary.ok_or_else(|| "failed to allocate a temporary workflow file".to_string())?;
+    if let Err(error) = temporary_file
+        .write_all(contents)
+        .and_then(|_| temporary_file.sync_all())
+    {
+        let _ = fs::remove_file(&temporary_path);
+        return Err(format!(
+            "failed to write temporary workflow file {}: {error}",
+            temporary_path.display()
+        ));
+    }
+    drop(temporary_file);
+
+    replace_file_from_temporary(path, &temporary_path)
+}
+
+#[cfg(unix)]
+fn replace_file_from_temporary(path: &Path, temporary_path: &Path) -> Result<(), String> {
+    fs::rename(temporary_path, path).map_err(|error| {
+        let _ = fs::remove_file(temporary_path);
+        format!(
+            "failed to replace workflow file {}: {error}",
+            path.display()
+        )
+    })
+}
+
+#[cfg(not(unix))]
+fn replace_file_from_temporary(path: &Path, temporary_path: &Path) -> Result<(), String> {
+    let backup_path = path.with_extension(format!("{}.bak", std::process::id()));
+    fs::rename(path, &backup_path).map_err(|error| {
+        let _ = fs::remove_file(temporary_path);
+        format!(
+            "failed to prepare workflow file {}: {error}",
+            path.display()
+        )
+    })?;
+
+    if let Err(error) = fs::rename(temporary_path, path) {
+        let restore_result = fs::rename(&backup_path, path);
+        let _ = fs::remove_file(temporary_path);
+        return Err(match restore_result {
+            Ok(()) => format!("failed to replace workflow file {}: {error}", path.display()),
+            Err(restore_error) => format!(
+                "failed to replace workflow file {}: {error}; backup remains at {} because restoration failed: {restore_error}",
+                path.display(),
+                backup_path.display()
+            ),
+        });
+    }
+
+    fs::remove_file(&backup_path).map_err(|error| {
+        format!(
+            "workflow was saved, but failed to remove backup {}: {error}",
+            backup_path.display()
+        )
+    })
+}
+
 fn repo_root() -> Result<PathBuf, String> {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     manifest_dir
@@ -355,7 +447,9 @@ fn path_to_ui(root: &Path, path: &Path) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::validate_workflow_source;
+    use std::{fs, time::SystemTime};
+
+    use super::{replace_file_safely, validate_workflow_source};
 
     #[test]
     fn workflow_validation_reports_yaml_locations() {
@@ -375,5 +469,34 @@ mod tests {
         assert_eq!(result.kind, Some("semantic"));
         assert!(result.message.contains("workflow name is required"));
         assert_eq!(result.line, None);
+    }
+
+    #[test]
+    fn safe_file_replacement_preserves_complete_contents() {
+        let unique = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .expect("time after epoch")
+            .as_nanos();
+        let directory = std::env::temp_dir().join(format!(
+            "devknife-safe-save-{}-{unique}",
+            std::process::id()
+        ));
+        fs::create_dir(&directory).expect("create test directory");
+        let path = directory.join("workflow.yaml");
+        fs::write(&path, "name: before\n").expect("write original");
+
+        replace_file_safely(&path, b"name: after\n").expect("replace file");
+
+        assert_eq!(
+            fs::read_to_string(&path).expect("read replacement"),
+            "name: after\n"
+        );
+        assert_eq!(
+            fs::read_dir(&directory)
+                .expect("read test directory")
+                .count(),
+            1
+        );
+        fs::remove_dir_all(&directory).expect("remove test directory");
     }
 }
