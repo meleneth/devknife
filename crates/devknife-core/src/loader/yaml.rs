@@ -42,6 +42,19 @@ pub fn validate_environment(environment: &RuntimeEnvironment) -> Result<(), Load
         }
     }
 
+    for (name, value) in &environment.secret_refs {
+        if name.trim().is_empty() {
+            return Err(LoadError::Validation(
+                "environment secret reference name is required".to_string(),
+            ));
+        }
+        if value.is_empty() {
+            return Err(LoadError::Validation(format!(
+                "environment secret reference '{name}' must not be empty"
+            )));
+        }
+    }
+
     Ok(())
 }
 

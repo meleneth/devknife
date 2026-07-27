@@ -344,6 +344,43 @@ handlers:
 }
 
 #[test]
+fn secret_templates_are_redacted_from_run_reports() {
+    let workflow = devknife_core::load_workflow_yaml(
+        r#"
+name: redacted-secret
+seed_events:
+  - id: seed
+    type: account.load.requested
+handlers:
+  - on: account.load.requested
+    effects:
+      - type: rest
+        operation: load_account
+        method: GET
+        base_url: "http://127.0.0.1:1"
+        path: "/accounts?token={{ secret.api_token }}"
+"#,
+    )
+    .expect("workflow parses");
+    let mut secret_refs = BTreeMap::new();
+    secret_refs.insert("api_token".to_string(), "highly-sensitive".to_string());
+
+    let report = Runner::with_environment(
+        ExecutionLimits::default(),
+        RuntimeEnvironment {
+            secret_refs,
+            ..RuntimeEnvironment::default()
+        },
+    )
+    .run(workflow);
+    let serialized = serde_json::to_string(&report).expect("report serializes");
+
+    assert_eq!(report.status, RunStatus::Failed);
+    assert!(!serialized.contains("highly-sensitive"));
+    assert!(serialized.contains("<redacted>"));
+}
+
+#[test]
 fn response_emission_requires_jsonpath_from_selector() {
     let shorthand = devknife_core::load_workflow_yaml(
         r#"

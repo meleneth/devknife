@@ -97,7 +97,11 @@ impl Runner {
 
     pub fn run(&self, workflow: Workflow) -> RunReport {
         let run_id = Uuid::new_v4().to_string();
-        let mut state = RunState::new(run_id, workflow.name.clone());
+        let mut state = RunState::new(
+            run_id,
+            workflow.name.clone(),
+            self.environment.secret_refs.values().cloned().collect(),
+        );
 
         state.push_trace(TraceEntryKind::RunStarted {
             run_id: state.run_id.clone(),
@@ -2605,6 +2609,15 @@ fn resolve_template_expression(
         });
     }
 
+    if let Some(name) = expression.strip_prefix("secret.") {
+        return environment.secret_refs.get(name).cloned().ok_or_else(|| {
+            EngineError::RestRequestBuild {
+                operation: operation.to_string(),
+                message: format!("environment secret reference '{name}' was not found"),
+            }
+        });
+    }
+
     Err(EngineError::RestRequestBuild {
         operation: operation.to_string(),
         message: format!("unsupported template expression '{expression}'"),
@@ -2638,15 +2651,17 @@ struct RunState {
     workflow_name: String,
     trace: Vec<TraceEntry>,
     next_trace_sequence: u64,
+    secret_values: Vec<String>,
 }
 
 impl RunState {
-    fn new(run_id: String, workflow_name: String) -> Self {
+    fn new(run_id: String, workflow_name: String, secret_values: Vec<String>) -> Self {
         Self {
             run_id,
             workflow_name,
             trace: Vec::new(),
             next_trace_sequence: 0,
+            secret_values,
         }
     }
 
@@ -2673,28 +2688,69 @@ impl RunState {
         self.push_trace(TraceEntryKind::RunEnded {
             status: RunStatus::Succeeded,
         });
-        RunReport {
-            run_id: self.run_id,
-            workflow_name: self.workflow_name,
-            status: RunStatus::Succeeded,
-            trace: self.trace,
-            failure: None,
-        }
+        redact_run_report(
+            RunReport {
+                run_id: self.run_id,
+                workflow_name: self.workflow_name,
+                status: RunStatus::Succeeded,
+                trace: self.trace,
+                failure: None,
+            },
+            &self.secret_values,
+        )
     }
 
     fn fail(mut self, trace_entry_id: Option<String>, message: String) -> RunReport {
         self.push_trace(TraceEntryKind::RunEnded {
             status: RunStatus::Failed,
         });
-        RunReport {
-            run_id: self.run_id,
-            workflow_name: self.workflow_name,
-            status: RunStatus::Failed,
-            trace: self.trace,
-            failure: Some(TraceFailure {
-                trace_entry_id,
-                message,
-            }),
+        redact_run_report(
+            RunReport {
+                run_id: self.run_id,
+                workflow_name: self.workflow_name,
+                status: RunStatus::Failed,
+                trace: self.trace,
+                failure: Some(TraceFailure {
+                    trace_entry_id,
+                    message,
+                }),
+            },
+            &self.secret_values,
+        )
+    }
+}
+
+fn redact_run_report(report: RunReport, secret_values: &[String]) -> RunReport {
+    let secrets = secret_values
+        .iter()
+        .filter(|value| !value.is_empty())
+        .collect::<Vec<_>>();
+    if secrets.is_empty() {
+        return report;
+    }
+
+    fn redact_value(value: &mut Value, secrets: &[&String]) {
+        match value {
+            Value::String(text) => {
+                for secret in secrets {
+                    *text = text.replace(secret.as_str(), "<redacted>");
+                }
+            }
+            Value::Array(values) => {
+                for value in values {
+                    redact_value(value, secrets);
+                }
+            }
+            Value::Object(values) => {
+                for value in values.values_mut() {
+                    redact_value(value, secrets);
+                }
+            }
+            Value::Null | Value::Bool(_) | Value::Number(_) => {}
         }
     }
+
+    let mut value = serde_json::to_value(report).expect("run report serializes");
+    redact_value(&mut value, &secrets);
+    serde_json::from_value(value).expect("redacted run report deserializes")
 }

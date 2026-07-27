@@ -47,7 +47,11 @@ Rules:
 - shared files contain references (for example `secret_ref: api_token`)
 - trace never prints secret material
 
-Cross-platform secret storage details are deferred and tracked in open questions.
+Environment `secret_refs` can be referenced in workflow templates as `{{ secret.name }}`. Secret
+values are redacted from returned and persisted run reports. Environment files remain local
+configuration and must not contain production secrets in version control.
+
+Cross-platform secret-store integration details are deferred and tracked in open questions.
 
 ## Dry-Run Intent
 
