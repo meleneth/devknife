@@ -121,6 +121,10 @@ WebSocket smoke test:
 - `docker compose -f testbed/docker-compose.yml down`
 - or `testbed/bin/websocket-smoke`
 
+Production-shaped customer onboarding demo:
+
+- `testbed/bin/customer-onboarding-demo`
+
 Cross-protocol smoke test:
 
 - `testbed/bin/cross-protocol-smoke`

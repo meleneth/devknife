@@ -31,7 +31,7 @@ Status: Active
 
 ## Developer Experience
 
-- What production-shaped demo should become the V1 acceptance story?
+- How polished should the customer onboarding demo be before V1 release notes and screenshots?
 - How do we keep Rust learning value high while using AI assistance responsibly?
 
 ## Product Boundary
@@ -51,7 +51,6 @@ Status: Active
 - GoAWS is the first local SQS fixture; whether LocalStack is needed later remains open.
 - The first meaningful cross-protocol demo runs against local REST, GraphQL, WebSocket, and GoAWS
   fixtures. A chained REST fixture also passes a created account ID into a subsequent user-creation
-  API. The remaining question is which production-shaped story should become the V1 acceptance
-  demo.
+  API. The V1 acceptance story is now the customer onboarding demo in `examples/workflows/customer-onboarding-demo.workflow.yaml`.
 - Write-capable effects are opt-in per run. Exact capability approvals are the default policy;
   approve-all remains an explicit convenience.

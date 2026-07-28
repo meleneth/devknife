@@ -1,0 +1,159 @@
+version: devknife.workflow/v1alpha1
+name: customer-onboarding-demo
+seed_events:
+  - id: seed-customer-onboarding
+    type: customer.onboarding.requested
+    payload:
+      account_name: Launch Customer Co
+      user_email: operator@launch-customer.test
+      correlation_id: onboarding-demo-001
+handlers:
+  - on: customer.onboarding.requested
+    effects:
+      - type: rest
+        service: rest
+        operation: create_customer_account
+        method: POST
+        path: /accounts
+        headers:
+          x-correlation-id: "{{ event.payload.correlation_id }}"
+        json_body:
+          name: "{{ event.payload.account_name }}"
+        expect:
+          status: 201
+        emits:
+          - event_type: customer.account.created
+            payload:
+              account_id:
+                from: $.body.id
+              account_name:
+                from: $.body.name
+              correlation_id:
+                from: $.body.correlation_id
+  - on: customer.account.created
+    effects:
+      - type: rest
+        service: rest
+        operation: invite_primary_operator
+        method: POST
+        path: /accounts/{{ event.payload.account_id }}/users
+        headers:
+          x-correlation-id: "{{ event.payload.correlation_id }}"
+        json_body:
+          email: operator@launch-customer.test
+        expect:
+          status: 201
+        emits:
+          - event_type: customer.operator.invited
+            payload:
+              account_id:
+                from: $.body.account_id
+              user_id:
+                from: $.body.id
+              email:
+                from: $.body.email
+              correlation_id:
+                from: $.body.correlation_id
+  - on: customer.operator.invited
+    effects:
+      - type: graphql
+        service: graphql
+        operation_name: ProvisionWorkspaceReadModel
+        query: |
+          mutation ProvisionWorkspaceReadModel($name: String!, $correlationId: String) {
+            createAccount(name: $name, correlationId: $correlationId) {
+              id
+              name
+              users { id email }
+            }
+          }
+        variables:
+          name: Launch Customer Co
+          correlationId: onboarding-demo-001
+        expect:
+          status: 200
+        emits:
+          - event_type: customer.workspace.projected
+            payload:
+              account_id:
+                from: $.data.createAccount.id
+              account_name:
+                from: $.data.createAccount.name
+  - on: customer.workspace.projected
+    effects:
+      - type: websocket
+        service: websocket
+        session: onboarding-status
+        send:
+          json:
+            type: subscribe
+            channel: onboarding-status
+            correlation_id: "{{ event.payload.account_id }}"
+        expect:
+          json:
+            "$.type": subscription.confirmed
+            "$.channel": onboarding-status
+        emits:
+          - event_type: customer.onboarding.status_subscription.confirmed
+            payload:
+              account_id:
+                from: $.correlation_id
+              channel:
+                from: $.channel
+  - on: customer.onboarding.status_subscription.confirmed
+    effects:
+      - type: sns_publish
+        service: aws
+        topic_arn: "{{ env.workflow_events_topic_arn }}"
+        message:
+          account_id: "{{ event.payload.account_id }}"
+          channel: "{{ event.payload.channel }}"
+          onboarding_status: ready_for_operator
+          source: customer-onboarding-demo
+        emits:
+          - event_type: customer.onboarding.event.published
+            payload:
+              message_id:
+                from: $.message_id
+  - on: customer.onboarding.event.published
+    effects:
+      - type: sqs_receive
+        service: aws
+        queue_url: "{{ env.workflow_input_queue_url }}"
+        wait_time_seconds: 1
+        delete_on_success: true
+        emits:
+          - event_type: customer.onboarding.event.received
+            payload:
+              account_id:
+                from: $.message.body_message_json.account_id
+              onboarding_status:
+                from: $.message.body_message_json.onboarding_status
+              source:
+                from: $.message.body_message_json.source
+              sqs_message_id:
+                from: $.message.message_id
+  - on: customer.onboarding.event.received
+    effects:
+      - type: assert
+        path: onboarding_status
+        equals: ready_for_operator
+      - type: assert
+        path: source
+        equals: customer-onboarding-demo
+      - type: sqs_send
+        service: aws
+        queue_url: "{{ env.workflow_results_queue_url }}"
+        message:
+          account_id: "{{ event.payload.account_id }}"
+          onboarding_status: "{{ event.payload.onboarding_status }}"
+          source: customer-onboarding-demo
+        emits:
+          - event_type: customer.onboarding.acceptance_recorded
+            payload:
+              message_id:
+                from: $.message_id
+  - on: customer.onboarding.acceptance_recorded
+    effects:
+      - type: record
+        message: customer onboarding completed across REST, GraphQL, WebSocket, SNS, and SQS

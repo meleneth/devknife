@@ -84,6 +84,12 @@ cargo run -p devknife-cli -- run examples/workflows/websocket-smoke.workflow.yam
 docker compose -f testbed/docker-compose.yml down
 ```
 
+Production-shaped customer onboarding demo:
+
+```sh
+testbed/bin/customer-onboarding-demo
+```
+
 Cross-protocol engine smoke:
 
 ```sh

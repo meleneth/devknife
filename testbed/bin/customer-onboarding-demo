@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+docker compose -f testbed/docker-compose.yml up --build -d rest-service graphql-service websocket-service goaws
+trap 'docker compose -f testbed/docker-compose.yml down' EXIT
+
+for url in \
+  http://localhost:18101/health \
+  http://localhost:18102/health \
+  http://localhost:18103/health
+do
+  for _ in {1..30}; do
+    if curl --fail --silent --show-error "$url" >/dev/null 2>&1; then
+      break
+    fi
+    sleep 1
+  done
+
+  curl --fail --silent --show-error "$url" >/dev/null
+done
+
+cargo run -p devknife-cli -- run examples/workflows/customer-onboarding-demo.workflow.yaml --environment examples/environments/local.yaml --allow-write

@@ -94,8 +94,7 @@ The next work should be selected from these release and product gaps rather than
 bootstrap phases:
 
 1. Freeze the V1 scope and compatibility promise for `devknife.workflow/v1alpha1`.
-2. Build one production-shaped demo that communicates the event-native value without relying only
-   on synthetic protocol fixtures.
+2. Harden the production-shaped customer onboarding demo into release material.
 3. Add native desktop packaging and an interactive Linux/Windows validation path.
 4. Decide the V1 authentication and secret-storage boundary.
 5. Decide which runtime controls enter V1: retries, cancellation, concurrency, and failure policy.
@@ -113,7 +112,7 @@ post-V1 unless the scope is explicitly changed.
 - [x] Capability planning and exact approval enforcement.
 - [x] Linux and Windows CI for the Rust workspace and desktop web build.
 - [ ] Written V1 schema compatibility and migration policy.
-- [ ] Production-shaped demonstration and acceptance script.
+- [x] Production-shaped demonstration and acceptance script.
 - [ ] Native desktop packages with interactive smoke validation.
 - [ ] Explicit V1 decision for authentication and secure secret storage.
 
