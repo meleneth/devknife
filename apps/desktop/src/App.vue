@@ -569,9 +569,9 @@ async function loadRunReport(runId: string) {
 }
 
 function capabilityTone(risk: Risk) {
-  if (risk === 'write') return 'bg-[#ffde59] text-black border-black'
-  if (risk === 'read') return 'bg-[#6ee7f9] text-black border-black'
-  return 'bg-[#d9f99d] text-black border-black'
+  if (risk === 'write') return 'bg-[#e8d282] text-[#10121c] border-[#10121c]'
+  if (risk === 'read') return 'bg-[#6dead6] text-[#10121c] border-[#10121c]'
+  return 'bg-[#d3eed3] text-[#10121c] border-[#10121c]'
 }
 
 function traceLabel(entry: TraceEntry) {
@@ -608,26 +608,26 @@ function traceDetail(entry: TraceEntry) {
   <TooltipProvider>
     <main class="min-h-screen bg-background text-foreground">
       <div class="grid min-h-screen grid-cols-[280px_minmax(0,1fr)]">
-        <aside class="border-r-4 border-black bg-[#f7f0d8]">
-          <div class="flex h-16 items-center gap-3 border-b-4 border-black px-5">
-            <div class="grid size-9 place-items-center border-2 border-black bg-[#ff5c8a] shadow-[3px_3px_0_#000]">
+        <aside class="border-r-4 border-[#10121c] bg-[#f6e8e0]">
+          <div class="flex h-16 items-center gap-3 border-b-4 border-[#10121c] px-5">
+            <div class="grid size-9 place-items-center border-2 border-[#10121c] bg-[#fa6e79] shadow-[3px_3px_0_#10121c]">
               <Boxes class="size-5" />
             </div>
             <div>
               <p class="text-sm font-black uppercase leading-none tracking-normal">devknife</p>
-              <p class="text-xs font-semibold text-neutral-700">workflow bench</p>
+              <p class="text-xs font-semibold text-[#4d3533]">workflow bench</p>
             </div>
           </div>
 
           <div class="px-4 py-4">
             <div class="mb-3 flex items-center justify-between">
-              <p class="text-xs font-black uppercase tracking-normal text-neutral-700">Workflows</p>
+              <p class="text-xs font-black uppercase tracking-normal text-[#4d3533]">Workflows</p>
               <Tooltip>
                 <TooltipTrigger as-child>
                   <Button
                     variant="outline"
                     size="icon"
-                    class="size-8 border-2 border-black bg-white shadow-[2px_2px_0_#000]"
+                    class="size-8 border-2 border-[#10121c] bg-[#ffffff] shadow-[2px_2px_0_#10121c]"
                     :disabled="loading || running"
                     @click="refreshWorkflows"
                   >
@@ -642,12 +642,12 @@ function traceDetail(entry: TraceEntry) {
               <button
                 v-for="workflow in workflows"
                 :key="workflow.path"
-                class="mb-3 w-full border-2 border-black bg-white p-3 text-left shadow-[4px_4px_0_#000] transition-transform hover:-translate-y-0.5"
+                class="mb-3 w-full border-2 border-[#10121c] bg-[#ffffff] p-3 text-left shadow-[4px_4px_0_#10121c] transition-transform hover:-translate-y-0.5"
                 :class="
                   !workflow.valid
-                    ? 'bg-[#fecaca]'
+                    ? 'bg-[#ffd1d5]'
                     : workflow.path === selectedPath
-                      ? 'bg-[#d9f99d]'
+                      ? 'bg-[#d3eed3]'
                       : ''
                 "
                 :disabled="loading || validating || saving || running"
@@ -657,20 +657,20 @@ function traceDetail(entry: TraceEntry) {
                   <span class="break-words text-sm font-black leading-tight">
                     {{ workflow.name }}
                   </span>
-                  <Badge class="border-2 border-black bg-[#6ee7f9] text-black">
+                  <Badge class="border-2 border-[#10121c] bg-[#6dead6] text-[#10121c]">
                     {{ workflow.valid ? workflow.effectCount : 'invalid' }}
                   </Badge>
                 </div>
-                <p class="mb-2 break-words font-mono text-[11px] text-neutral-700">
+                <p class="mb-2 break-words font-mono text-[11px] text-[#4d3533]">
                   {{ workflow.path }}
                 </p>
                 <p
                   v-if="workflow.validationError"
-                  class="mb-2 line-clamp-3 text-xs font-bold text-red-900"
+                  class="mb-2 line-clamp-3 text-xs font-bold text-[#ac2847]"
                 >
                   {{ workflow.validationError }}
                 </p>
-                <div class="flex gap-2 text-[11px] font-bold text-neutral-800">
+                <div class="flex gap-2 text-[11px] font-bold text-[#2c1e31]">
                   <span>{{ workflow.seedEventCount }} seeds</span>
                   <span>{{ workflow.handlerCount }} handlers</span>
                 </div>
@@ -679,10 +679,10 @@ function traceDetail(entry: TraceEntry) {
           </div>
         </aside>
 
-        <section class="min-w-0 bg-[#fffdf4]">
-          <header class="flex h-16 items-center justify-between border-b-4 border-black bg-white px-6">
+        <section class="min-w-0 bg-[#f7f3b7]">
+          <header class="flex h-16 items-center justify-between border-b-4 border-[#10121c] bg-[#ffffff] px-6">
             <div class="min-w-0">
-              <p class="text-xs font-black uppercase tracking-normal text-neutral-600">
+              <p class="text-xs font-black uppercase tracking-normal text-[#6e4c30]">
                 {{ selectedWorkflow?.version ?? 'devknife.workflow/v1alpha1' }}
               </p>
               <h1 class="truncate text-xl font-black tracking-normal">
@@ -692,7 +692,7 @@ function traceDetail(entry: TraceEntry) {
             <div class="flex items-center gap-2">
               <Button
                 variant="outline"
-                class="border-2 border-black bg-[#6ee7f9] text-black shadow-[3px_3px_0_#000]"
+                class="border-2 border-[#10121c] bg-[#6dead6] text-[#10121c] shadow-[3px_3px_0_#10121c]"
                 :disabled="
                   running ||
                   loading ||
@@ -706,7 +706,7 @@ function traceDetail(entry: TraceEntry) {
                 Plan
               </Button>
               <Button
-                class="border-2 border-black bg-[#ff5c8a] text-black shadow-[3px_3px_0_#000] hover:bg-[#ff7aa0]"
+                class="border-2 border-[#10121c] bg-[#fa6e79] text-[#10121c] shadow-[3px_3px_0_#10121c] hover:bg-[#ffa2ac]"
                 :disabled="running || loading || !selectedPath || !planReady"
                 @click="runSelectedWorkflow"
               >
@@ -720,14 +720,14 @@ function traceDetail(entry: TraceEntry) {
             <div class="min-w-0">
               <div
                 v-if="error"
-                class="mb-4 flex gap-3 border-2 border-black bg-[#ffde59] p-3 text-sm font-semibold shadow-[3px_3px_0_#000]"
+                class="mb-4 flex gap-3 border-2 border-[#10121c] bg-[#e8d282] p-3 text-sm font-semibold shadow-[3px_3px_0_#10121c]"
               >
                 <AlertCircle class="mt-0.5 size-4 shrink-0" />
                 <span>{{ error }}</span>
               </div>
 
               <Tabs v-model="activeTab" class="w-full">
-                <TabsList class="mb-4 border-2 border-black bg-white shadow-[3px_3px_0_#000]">
+                <TabsList class="mb-4 border-2 border-[#10121c] bg-[#ffffff] shadow-[3px_3px_0_#10121c]">
                   <TabsTrigger value="plan">Plan</TabsTrigger>
                   <TabsTrigger value="source">Source</TabsTrigger>
                   <TabsTrigger value="trace">Trace</TabsTrigger>
@@ -735,7 +735,7 @@ function traceDetail(entry: TraceEntry) {
                 </TabsList>
 
                 <TabsContent value="plan">
-                  <Card class="border-4 border-black bg-white shadow-[6px_6px_0_#000]">
+                  <Card class="border-4 border-[#10121c] bg-[#ffffff] shadow-[6px_6px_0_#10121c]">
                     <CardHeader>
                       <CardTitle class="flex items-center gap-2 text-lg font-black">
                         <ShieldCheck class="size-5" />
@@ -757,7 +757,7 @@ function traceDetail(entry: TraceEntry) {
                         </Badge>
                       </div>
 
-                      <Separator class="mb-4 h-0.5 bg-black" />
+                      <Separator class="mb-4 h-0.5 bg-[#10121c]" />
 
                       <Table>
                         <TableHeader>
@@ -778,7 +778,7 @@ function traceDetail(entry: TraceEntry) {
                             </TableCell>
                             <TableCell class="font-semibold">{{ effect.on }}</TableCell>
                             <TableCell>
-                              <Badge class="border-2 border-black bg-white text-black">
+                              <Badge class="border-2 border-[#10121c] bg-[#ffffff] text-[#10121c]">
                                 {{ effect.effect_type }}
                               </Badge>
                             </TableCell>
@@ -793,7 +793,7 @@ function traceDetail(entry: TraceEntry) {
                 </TabsContent>
 
                 <TabsContent value="source">
-                  <Card class="border-4 border-black bg-white shadow-[6px_6px_0_#000]">
+                  <Card class="border-4 border-[#10121c] bg-[#ffffff] shadow-[6px_6px_0_#10121c]">
                     <CardHeader>
                       <div class="flex items-start justify-between gap-4">
                         <div>
@@ -808,7 +808,7 @@ function traceDetail(entry: TraceEntry) {
                         <div class="flex shrink-0 gap-2">
                           <Button
                             variant="outline"
-                            class="border-2 border-black bg-white text-black shadow-[2px_2px_0_#000]"
+                            class="border-2 border-[#10121c] bg-[#ffffff] text-[#10121c] shadow-[2px_2px_0_#10121c]"
                             :disabled="
                               saving ||
                               validating ||
@@ -823,7 +823,7 @@ function traceDetail(entry: TraceEntry) {
                           </Button>
                           <Button
                             variant="outline"
-                            class="border-2 border-black bg-[#6ee7f9] text-black shadow-[2px_2px_0_#000]"
+                            class="border-2 border-[#10121c] bg-[#6dead6] text-[#10121c] shadow-[2px_2px_0_#10121c]"
                             :disabled="
                               saving ||
                               validating ||
@@ -837,7 +837,7 @@ function traceDetail(entry: TraceEntry) {
                             {{ validating ? 'Validating…' : 'Validate' }}
                           </Button>
                           <Button
-                            class="border-2 border-black bg-[#ff5c8a] text-black shadow-[2px_2px_0_#000]"
+                            class="border-2 border-[#10121c] bg-[#fa6e79] text-[#10121c] shadow-[2px_2px_0_#10121c]"
                             :disabled="
                               saving ||
                               validating ||
@@ -856,14 +856,14 @@ function traceDetail(entry: TraceEntry) {
                     <CardContent>
                       <div
                         v-if="sourceStatus"
-                        class="mb-3 border-2 border-black bg-[#d9f99d] px-3 py-2 text-sm font-bold"
+                        class="mb-3 border-2 border-[#10121c] bg-[#d3eed3] px-3 py-2 text-sm font-bold"
                       >
                         {{ sourceStatus }}
                       </div>
                       <div
                         v-if="sourceValidation"
-                        class="mb-3 border-2 border-black px-3 py-2 text-sm font-bold"
-                        :class="sourceValidation.valid ? 'bg-[#d9f99d]' : 'bg-[#ffde59]'"
+                        class="mb-3 border-2 border-[#10121c] px-3 py-2 text-sm font-bold"
+                        :class="sourceValidation.valid ? 'bg-[#d3eed3]' : 'bg-[#e8d282]'"
                       >
                         <p>
                           {{ sourceValidation.valid ? sourceValidation.message : `${sourceValidation.kind} error: ${sourceValidation.message}` }}
@@ -879,7 +879,7 @@ function traceDetail(entry: TraceEntry) {
                         v-model="workflowSource"
                         spellcheck="false"
                         aria-label="Workflow YAML source"
-                        class="min-h-[520px] resize-none border-2 border-black bg-neutral-950 p-4 font-mono text-xs leading-5 text-lime-200"
+                        class="min-h-[520px] resize-none border-2 border-[#10121c] bg-[#10121c] p-4 font-mono text-xs leading-5 text-[#9de64e]"
                         :disabled="
                           sourceLoading || validating || saving || running
                         "
@@ -890,7 +890,7 @@ function traceDetail(entry: TraceEntry) {
                 </TabsContent>
 
                 <TabsContent value="trace">
-                  <Card class="border-4 border-black bg-white shadow-[6px_6px_0_#000]">
+                  <Card class="border-4 border-[#10121c] bg-[#ffffff] shadow-[6px_6px_0_#10121c]">
                     <CardHeader>
                       <CardTitle class="flex items-center gap-2 text-lg font-black">
                         <GitBranch class="size-5" />
@@ -908,33 +908,33 @@ function traceDetail(entry: TraceEntry) {
                             v-model="traceQuery"
                             aria-label="Filter trace entries"
                             placeholder="Filter trace events, effects, and payloads"
-                            class="border-2 border-black bg-white pl-9"
+                            class="border-2 border-[#10121c] bg-[#ffffff] pl-9"
                           />
                         </div>
-                        <Badge class="shrink-0 border-2 border-black bg-[#6ee7f9] text-black">
+                        <Badge class="shrink-0 border-2 border-[#10121c] bg-[#6dead6] text-[#10121c]">
                           {{ traceRows.length }} / {{ runReport.trace.length }}
                         </Badge>
                       </div>
                       <ScrollArea class="h-[520px] pr-4">
                         <div
                           v-if="!runReport"
-                          class="grid h-80 place-items-center border-2 border-dashed border-black bg-[#f7f0d8] text-center"
+                          class="grid h-80 place-items-center border-2 border-dashed border-[#10121c] bg-[#f6e8e0] text-center"
                         >
                           <div>
                             <Terminal class="mx-auto mb-3 size-8" />
                             <p class="font-black">No trace loaded</p>
-                            <p class="text-sm text-neutral-700">The run button calls the Tauri backend.</p>
+                            <p class="text-sm text-[#4d3533]">The run button calls the Tauri backend.</p>
                           </div>
                         </div>
 
                         <div
                           v-else-if="traceRows.length === 0"
-                          class="grid h-80 place-items-center border-2 border-dashed border-black bg-[#f7f0d8] text-center"
+                          class="grid h-80 place-items-center border-2 border-dashed border-[#10121c] bg-[#f6e8e0] text-center"
                         >
                           <div>
                             <Search class="mx-auto mb-3 size-8" />
                             <p class="font-black">No matching trace entries</p>
-                            <p class="text-sm text-neutral-700">Try a broader filter.</p>
+                            <p class="text-sm text-[#4d3533]">Try a broader filter.</p>
                           </div>
                         </div>
 
@@ -942,14 +942,14 @@ function traceDetail(entry: TraceEntry) {
                           <li
                             v-for="entry in traceRows"
                             :key="entry.id"
-                            class="grid grid-cols-[42px_minmax(0,1fr)] gap-3 border-2 border-black bg-[#fffdf4] p-3 shadow-[3px_3px_0_#000]"
+                            class="grid grid-cols-[42px_minmax(0,1fr)] gap-3 border-2 border-[#10121c] bg-[#f7f3b7] p-3 shadow-[3px_3px_0_#10121c]"
                           >
-                            <span class="grid size-8 place-items-center border-2 border-black bg-[#d9f99d] font-mono text-xs font-black">
+                            <span class="grid size-8 place-items-center border-2 border-[#10121c] bg-[#d3eed3] font-mono text-xs font-black">
                               {{ entry.sequence }}
                             </span>
                             <div class="min-w-0">
                               <p class="truncate font-black">{{ traceLabel(entry) }}</p>
-                              <p class="truncate font-mono text-xs text-neutral-700">
+                              <p class="truncate font-mono text-xs text-[#4d3533]">
                                 {{ traceDetail(entry) }}
                               </p>
                             </div>
@@ -961,7 +961,7 @@ function traceDetail(entry: TraceEntry) {
                 </TabsContent>
 
                 <TabsContent value="raw">
-                  <Card class="border-4 border-black bg-white shadow-[6px_6px_0_#000]">
+                  <Card class="border-4 border-[#10121c] bg-[#ffffff] shadow-[6px_6px_0_#10121c]">
                     <CardHeader>
                       <CardTitle class="flex items-center gap-2 text-lg font-black">
                         <FileText class="size-5" />
@@ -972,7 +972,7 @@ function traceDetail(entry: TraceEntry) {
                       </CardDescription>
                     </CardHeader>
                     <CardContent>
-                      <pre class="max-h-[560px] overflow-auto border-2 border-black bg-neutral-950 p-4 text-xs leading-5 text-lime-200"><code>{{ JSON.stringify(runReport ?? selectedPlan, null, 2) }}</code></pre>
+                      <pre class="max-h-[560px] overflow-auto border-2 border-[#10121c] bg-[#10121c] p-4 text-xs leading-5 text-[#9de64e]"><code>{{ JSON.stringify(runReport ?? selectedPlan, null, 2) }}</code></pre>
                     </CardContent>
                   </Card>
                 </TabsContent>
@@ -980,10 +980,10 @@ function traceDetail(entry: TraceEntry) {
             </div>
 
             <div class="space-y-4">
-              <Card class="border-4 border-black bg-[#6ee7f9] shadow-[6px_6px_0_#000]">
+              <Card class="border-4 border-[#10121c] bg-[#6dead6] shadow-[6px_6px_0_#10121c]">
                 <CardHeader>
                   <CardTitle class="text-lg font-black">Environment</CardTitle>
-                  <CardDescription class="text-neutral-800">
+                  <CardDescription class="text-[#2c1e31]">
                     Runtime bindings for the next run.
                   </CardDescription>
                 </CardHeader>
@@ -991,7 +991,7 @@ function traceDetail(entry: TraceEntry) {
                   <select
                     v-model="selectedEnvironmentPath"
                     aria-label="Runtime environment"
-                    class="h-10 w-full border-2 border-black bg-white px-3 text-sm font-bold"
+                    class="h-10 w-full border-2 border-[#10121c] bg-[#ffffff] px-3 text-sm font-bold"
                     :disabled="loading || validating || saving || running"
                   >
                     <option value="">No environment</option>
@@ -1005,7 +1005,7 @@ function traceDetail(entry: TraceEntry) {
                   </select>
                   <div
                     v-if="environmentError"
-                    class="border-2 border-black bg-[#fecaca] p-2 text-xs font-bold"
+                    class="border-2 border-[#10121c] bg-[#ffd1d5] p-2 text-xs font-bold"
                   >
                     <div class="mb-2 flex items-start gap-2">
                       <AlertCircle class="mt-0.5 size-4 shrink-0" />
@@ -1014,7 +1014,7 @@ function traceDetail(entry: TraceEntry) {
                     <Button
                       variant="outline"
                       size="sm"
-                      class="border-2 border-black bg-white"
+                      class="border-2 border-[#10121c] bg-[#ffffff]"
                       :disabled="loading || running"
                       @click="refreshEnvironments"
                     >
@@ -1024,35 +1024,35 @@ function traceDetail(entry: TraceEntry) {
                   </div>
                   <div
                     v-if="selectedEnvironment?.validationError"
-                    class="flex items-start gap-2 border-2 border-black bg-[#fecaca] p-2 text-xs font-bold"
+                    class="flex items-start gap-2 border-2 border-[#10121c] bg-[#ffd1d5] p-2 text-xs font-bold"
                   >
                     <AlertCircle class="mt-0.5 size-4 shrink-0" />
                     <span>{{ selectedEnvironment.validationError }}</span>
                   </div>
                   <p
                     v-if="selectedEnvironment?.valid"
-                    class="font-mono text-xs font-semibold text-neutral-800"
+                    class="font-mono text-xs font-semibold text-[#2c1e31]"
                   >
                     {{ selectedEnvironment.serviceCount }} services ·
                     {{ selectedEnvironment.valueCount }} values ·
                     {{ selectedEnvironment.secretCount }} secret refs
                   </p>
-                  <p class="text-xs font-semibold text-neutral-700">
+                  <p class="text-xs font-semibold text-[#4d3533]">
                     Secret values are never displayed here.
                   </p>
                 </CardContent>
               </Card>
 
-              <Card class="border-4 border-black bg-[#d9f99d] shadow-[6px_6px_0_#000]">
+              <Card class="border-4 border-[#10121c] bg-[#d3eed3] shadow-[6px_6px_0_#10121c]">
                 <CardHeader>
                   <CardTitle class="text-lg font-black">Run status</CardTitle>
-                  <CardDescription class="text-neutral-800">
+                  <CardDescription class="text-[#2c1e31]">
                     Current engine response from Tauri.
                   </CardDescription>
                 </CardHeader>
                 <CardContent class="space-y-4">
                   <div class="flex items-center gap-3">
-                    <div class="grid size-10 place-items-center border-2 border-black bg-white">
+                    <div class="grid size-10 place-items-center border-2 border-[#10121c] bg-[#ffffff]">
                       <CheckCircle2 v-if="runReport?.status === 'succeeded'" class="size-5" />
                       <AlertCircle v-else class="size-5" />
                     </div>
@@ -1060,21 +1060,21 @@ function traceDetail(entry: TraceEntry) {
                       <p class="font-black uppercase">
                         {{ runReport?.status ?? (running ? 'running' : 'idle') }}
                       </p>
-                      <p class="font-mono text-xs text-neutral-700">
+                      <p class="font-mono text-xs text-[#4d3533]">
                         {{ runReport?.run_id ?? 'no run id yet' }}
                       </p>
                     </div>
                   </div>
                   <p
                     v-if="runReport?.failure"
-                    class="border-2 border-black bg-[#ffde59] p-2 text-sm font-semibold"
+                    class="border-2 border-[#10121c] bg-[#e8d282] p-2 text-sm font-semibold"
                   >
                     {{ runReport.failure.message }}
                   </p>
                 </CardContent>
               </Card>
 
-              <Card class="border-4 border-black bg-white shadow-[6px_6px_0_#000]">
+              <Card class="border-4 border-[#10121c] bg-[#ffffff] shadow-[6px_6px_0_#10121c]">
                 <CardHeader>
                   <CardTitle class="text-lg font-black">Mutating surface</CardTitle>
                   <CardDescription>
@@ -1086,19 +1086,19 @@ function traceDetail(entry: TraceEntry) {
                     <div
                       v-for="capability in mutatingCapabilities"
                       :key="capability.id"
-                      class="border-2 border-black bg-[#ffde59] p-3"
+                      class="border-2 border-[#10121c] bg-[#e8d282] p-3"
                     >
                       <p class="font-mono text-xs font-black">{{ capability.id }}</p>
-                      <p class="text-sm text-neutral-800">{{ capability.description }}</p>
+                      <p class="text-sm text-[#2c1e31]">{{ capability.description }}</p>
                     </div>
-                    <p v-if="mutatingCapabilities.length === 0" class="text-sm text-neutral-700">
+                    <p v-if="mutatingCapabilities.length === 0" class="text-sm text-[#4d3533]">
                       No write-capable effects in this plan.
                     </p>
                   </div>
                 </CardContent>
               </Card>
 
-              <Card class="border-4 border-black bg-white shadow-[6px_6px_0_#000]">
+              <Card class="border-4 border-[#10121c] bg-[#ffffff] shadow-[6px_6px_0_#10121c]">
                 <CardHeader>
                   <CardTitle class="flex items-center gap-2 text-lg font-black">
                     <History class="size-5" />
@@ -1112,7 +1112,7 @@ function traceDetail(entry: TraceEntry) {
                   <div class="space-y-2">
                     <div
                       v-if="runHistoryError"
-                      class="border-2 border-black bg-[#fecaca] p-2 text-xs font-bold"
+                      class="border-2 border-[#10121c] bg-[#ffd1d5] p-2 text-xs font-bold"
                     >
                       <div class="mb-2 flex items-start gap-2">
                         <AlertCircle class="mt-0.5 size-4 shrink-0" />
@@ -1121,7 +1121,7 @@ function traceDetail(entry: TraceEntry) {
                       <Button
                         variant="outline"
                         size="sm"
-                        class="border-2 border-black bg-white"
+                        class="border-2 border-[#10121c] bg-[#ffffff]"
                         :disabled="runHistoryRefreshing || running"
                         @click="refreshRunHistory"
                       >
@@ -1131,7 +1131,7 @@ function traceDetail(entry: TraceEntry) {
                     </div>
                     <div
                       v-if="runHistoryWarnings.length > 0"
-                      class="border-2 border-black bg-[#ffde59] p-2 text-xs font-bold"
+                      class="border-2 border-[#10121c] bg-[#e8d282] p-2 text-xs font-bold"
                     >
                       <div class="mb-1 flex items-start gap-2">
                         <AlertCircle class="mt-0.5 size-4 shrink-0" />
@@ -1152,7 +1152,7 @@ function traceDetail(entry: TraceEntry) {
                     <button
                       v-for="run in runHistory"
                       :key="run.runId"
-                      class="w-full border-2 border-black bg-[#fffdf4] p-3 text-left hover:bg-[#d9f99d]"
+                      class="w-full border-2 border-[#10121c] bg-[#f7f3b7] p-3 text-left hover:bg-[#d3eed3]"
                       :disabled="
                         running || runHistoryRefreshing || runReportLoading
                       "
@@ -1161,19 +1161,19 @@ function traceDetail(entry: TraceEntry) {
                       <div class="flex items-center justify-between gap-2">
                         <p class="truncate text-sm font-black">{{ run.workflowName }}</p>
                         <Badge
-                          class="border-2 border-black text-black"
-                          :class="run.status === 'succeeded' ? 'bg-[#d9f99d]' : 'bg-[#ffde59]'"
+                          class="border-2 border-[#10121c] text-[#10121c]"
+                          :class="run.status === 'succeeded' ? 'bg-[#d3eed3]' : 'bg-[#e8d282]'"
                         >
                           {{ run.status }}
                         </Badge>
                       </div>
-                      <p class="mt-1 truncate font-mono text-[11px] text-neutral-700">
+                      <p class="mt-1 truncate font-mono text-[11px] text-[#4d3533]">
                         {{ run.runId }} · {{ run.traceEntryCount }} entries
                       </p>
                     </button>
                     <p
                       v-if="runHistoryRefreshing"
-                      class="text-sm text-neutral-700"
+                      class="text-sm text-[#4d3533]"
                     >
                       Loading persisted runs…
                     </p>
@@ -1181,7 +1181,7 @@ function traceDetail(entry: TraceEntry) {
                       v-else-if="
                         runHistory.length === 0 && !runHistoryError
                       "
-                      class="text-sm text-neutral-700"
+                      class="text-sm text-[#4d3533]"
                     >
                       No persisted runs yet.
                     </p>

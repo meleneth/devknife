@@ -54,7 +54,7 @@ jobs:
           cache-dependency-path: apps/desktop/package-lock.json
 
       - name: Install desktop dependencies
-        run: npm --prefix apps/desktop ci
+        run: npm --prefix apps/desktop install
 
       - name: Check Rust formatting
         run: cargo fmt --all -- --check
