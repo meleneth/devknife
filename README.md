@@ -66,6 +66,7 @@ Useful commands:
 - `npm --prefix apps/desktop run build`
 - `npm --prefix apps/desktop run dev:web`
 - `npm --prefix apps/desktop run dev:tauri`
+- `npm --prefix apps/desktop run package`
 - `docker compose -f testbed/docker-compose.yml config`
 
 GitHub Actions validates formatting, Clippy, the full Rust workspace, and the Vue production build
@@ -82,6 +83,13 @@ before executing effects. Pass `--environment` to `validate` to run the same bin
 execution, or to `plan` to check bindings before printing the plan.
 
 The desktop app lives in `apps/desktop`. `dev:web` previews the Vue shell, while repository operations require `dev:tauri`, which invokes Rust commands for workflow listing, planning, and execution. On Linux, Tauri requires WebKit/GTK system development packages; see `docs/008-devcontainer-and-tooling.md`.
+
+On Windows, run `scripts\install-gui.cmd` to build the desktop app and install `devknife` onto your user `PATH`. The installed command opens the GUI with no arguments and runs CLI subcommands such as `devknife plan ...` when arguments are provided.
+
+To create local desktop installers/bundles, run `npm --prefix apps/desktop run package`.
+Artifacts are written under `target/release/bundle/`.
+The manual GitHub Actions workflow `Package Desktop` builds unsigned bundles for Linux, Windows,
+and macOS and uploads them as workflow artifacts.
 
 REST smoke test:
 

@@ -56,6 +56,7 @@ Useful frontend checks:
 - `npm --prefix apps/desktop run build`
 - `npm --prefix apps/desktop run dev:web`
 - `npm --prefix apps/desktop run dev:tauri`
+- `npm --prefix apps/desktop run package`
 
 On Linux, Tauri requires native WebKit/GTK development packages. If `cargo check` reports missing
 `pkg-config`, D-Bus, GTK, or WebKit packages, install the platform prerequisites before building.
@@ -67,6 +68,25 @@ sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev
 ```
 
 See the official Tauri prerequisites: https://tauri.app/start/prerequisites/
+
+## Desktop Packaging
+
+Run from the repository root:
+
+- `npm --prefix apps/desktop run package`
+- `npm --prefix apps/desktop run package:debug`
+
+Release-mode bundles are written to `target/release/bundle/`.
+Debug bundles are written to `target/debug/bundle/`.
+
+Windows-specific bundle helpers are also available:
+
+- `npm --prefix apps/desktop run package:windows:msi`
+- `npm --prefix apps/desktop run package:windows:nsis`
+
+These local packaging commands use `--no-sign`, so the generated installers are suitable for
+development handoff and smoke testing. Production distribution will need platform-specific signing,
+notarization on macOS, and a release process for publishing checksums and installer artifacts.
 
 ## Troubleshooting
 

@@ -1,14 +1,19 @@
 {
   "name": "devknife-desktop",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 1420",
     "dev:web": "vite --host 127.0.0.1 --port 1420",
     "dev:tauri": "tauri dev",
-    "build": "vue-tsc -b && vite build",
-    "build:tauri": "tauri build",
+    "build": "npm run build:web",
+    "build:web": "vue-tsc -b && vite build",
+    "build:tauri": "npm run package",
+    "package": "tauri build --ci --no-sign",
+    "package:debug": "tauri build --ci --debug --no-sign",
+    "package:windows:msi": "tauri build --ci --no-sign --bundles msi",
+    "package:windows:nsis": "tauri build --ci --no-sign --bundles nsis",
     "preview": "vite preview"
   },
   "dependencies": {

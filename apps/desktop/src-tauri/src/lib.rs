@@ -522,7 +522,7 @@ fn replace_file_safely(path: &Path, contents: &[u8]) -> Result<(), String> {
             Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
             Err(error) => {
                 return Err(format!(
-                    "failed to create temporary workflow file {}: {error}",
+                    "failed to create temporary file {}: {error}",
                     candidate.display()
                 ));
             }
@@ -530,14 +530,14 @@ fn replace_file_safely(path: &Path, contents: &[u8]) -> Result<(), String> {
     }
 
     let (temporary_path, mut temporary_file) =
-        temporary.ok_or_else(|| "failed to allocate a temporary workflow file".to_string())?;
+        temporary.ok_or_else(|| "failed to allocate a temporary file".to_string())?;
     if let Err(error) = temporary_file
         .write_all(contents)
         .and_then(|_| temporary_file.sync_all())
     {
         let _ = fs::remove_file(&temporary_path);
         return Err(format!(
-            "failed to write temporary workflow file {}: {error}",
+            "failed to write temporary file {}: {error}",
             temporary_path.display()
         ));
     }
@@ -550,31 +550,32 @@ fn replace_file_safely(path: &Path, contents: &[u8]) -> Result<(), String> {
 fn replace_file_from_temporary(path: &Path, temporary_path: &Path) -> Result<(), String> {
     fs::rename(temporary_path, path).map_err(|error| {
         let _ = fs::remove_file(temporary_path);
-        format!(
-            "failed to replace workflow file {}: {error}",
-            path.display()
-        )
+        format!("failed to replace file {}: {error}", path.display())
     })
 }
 
 #[cfg(not(unix))]
 fn replace_file_from_temporary(path: &Path, temporary_path: &Path) -> Result<(), String> {
+    if !path.exists() {
+        return fs::rename(temporary_path, path).map_err(|error| {
+            let _ = fs::remove_file(temporary_path);
+            format!("failed to create file {}: {error}", path.display())
+        });
+    }
+
     let backup_path = path.with_extension(format!("{}.bak", std::process::id()));
     fs::rename(path, &backup_path).map_err(|error| {
         let _ = fs::remove_file(temporary_path);
-        format!(
-            "failed to prepare workflow file {}: {error}",
-            path.display()
-        )
+        format!("failed to prepare file {}: {error}", path.display())
     })?;
 
     if let Err(error) = fs::rename(temporary_path, path) {
         let restore_result = fs::rename(&backup_path, path);
         let _ = fs::remove_file(temporary_path);
         return Err(match restore_result {
-            Ok(()) => format!("failed to replace workflow file {}: {error}", path.display()),
+            Ok(()) => format!("failed to replace file {}: {error}", path.display()),
             Err(restore_error) => format!(
-                "failed to replace workflow file {}: {error}; backup remains at {} because restoration failed: {restore_error}",
+                "failed to replace file {}: {error}; backup remains at {} because restoration failed: {restore_error}",
                 path.display(),
                 backup_path.display()
             ),
@@ -583,7 +584,7 @@ fn replace_file_from_temporary(path: &Path, temporary_path: &Path) -> Result<(),
 
     fs::remove_file(&backup_path).map_err(|error| {
         format!(
-            "workflow was saved, but failed to remove backup {}: {error}",
+            "file was saved, but failed to remove backup {}: {error}",
             backup_path.display()
         )
     })
@@ -769,12 +770,14 @@ mod tests {
         assert_eq!(
             resolve_workflow_path(&root, "examples/workflows/workflow.yml")
                 .expect("resolve yml workflow"),
-            workflow
+            workflow.canonicalize().expect("canonical workflow path")
         );
         assert_eq!(
             resolve_environment_path(&root, "examples/environments/environment.yaml")
                 .expect("resolve yaml environment"),
             environment
+                .canonicalize()
+                .expect("canonical environment path")
         );
         assert!(resolve_workflow_path(&root, "examples/workflows/workflow.json").is_err());
 
@@ -800,7 +803,7 @@ mod tests {
 
         assert_eq!(
             confine_discovered_path(&allowed, &inside).expect("inside path is accepted"),
-            inside
+            inside.canonicalize().expect("canonical inside path")
         );
         assert!(confine_discovered_path(&allowed, &outside).is_err());
 
@@ -876,6 +879,31 @@ mod tests {
 
         assert!(error.contains("contains run id 'different' instead of 'expected'"));
 
+        fs::remove_dir_all(&directory).expect("remove test directory");
+    }
+
+    #[test]
+    fn safe_file_replacement_creates_missing_files() {
+        let unique = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .expect("time after epoch")
+            .as_nanos();
+        let directory = std::env::temp_dir().join(format!(
+            "devknife-safe-create-{}-{unique}",
+            std::process::id()
+        ));
+        fs::create_dir(&directory).expect("create test directory");
+        let path = directory.join("new.trace.json");
+
+        replace_file_safely(&path, b"{}\n").expect("create file");
+
+        assert_eq!(fs::read_to_string(&path).expect("read file"), "{}\n");
+        assert_eq!(
+            fs::read_dir(&directory)
+                .expect("read test directory")
+                .count(),
+            1
+        );
         fs::remove_dir_all(&directory).expect("remove test directory");
     }
 
