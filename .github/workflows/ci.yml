@@ -67,3 +67,14 @@ jobs:
 
       - name: Build Vue desktop frontend
         run: npm --prefix apps/desktop run build
+
+      - name: Install Playwright browsers on Linux
+        if: runner.os == 'Linux'
+        run: npm --prefix apps/desktop exec playwright install --with-deps chromium
+
+      - name: Install Playwright browsers on Windows
+        if: runner.os == 'Windows'
+        run: npm --prefix apps/desktop exec playwright install chromium
+
+      - name: Test Vue desktop frontend
+        run: npm --prefix apps/desktop run test:e2e

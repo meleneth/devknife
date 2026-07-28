@@ -14,7 +14,8 @@
     "package:debug": "tauri build --ci --debug --no-sign",
     "package:windows:msi": "tauri build --ci --no-sign --bundles msi",
     "package:windows:nsis": "tauri build --ci --no-sign --bundles nsis",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@lucide/vue": "^1.26.0",
@@ -30,6 +31,7 @@
     "vue": "^3.5.39"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.0",
     "@tauri-apps/cli": "^2.11.4",
     "@types/node": "^24.13.2",
     "@vitejs/plugin-vue": "^6.0.7",
